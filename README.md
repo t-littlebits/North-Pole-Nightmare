@@ -48,7 +48,8 @@ Push to GitHub, then Netlify → **Add new site → Import from Git**. Build com
 ## Troubleshooting Supabase (403 / 404 in the API logs)
 1. Make sure `supabase/schema.sql` ran without errors (SQL Editor). If it did, run `supabase/fix-grants.sql` as well: newer projects do not auto-grant Data API access to new tables and functions.
 2. `VITE_SUPABASE_URL` must be just `https://<ref>.supabase.co` (no `/rest/v1`, no trailing slash).
-3. After changing env vars on Netlify, trigger a fresh deploy.
+3. Functions crash with a "WebSocket library missing" stack trace: run `npm install` (installs `ws`, which the functions pass to supabase-js) and commit the updated `package-lock.json`.
+4. After changing env vars on Netlify, trigger a fresh deploy.
 
 ## How security works
 
