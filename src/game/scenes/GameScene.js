@@ -132,7 +132,7 @@ export default class GameScene extends Phaser.Scene {
     }
     for (let i = 0; i < 34; i++) this.add.image(rnd(80, WORLD_W - 80), rnd(100, WORLD_H - 80), 'snowpile').setDepth(0);
     for (let i = 0; i < 20; i++) { const y = rnd(140, WORLD_H - 80); this.add.image(rnd(80, WORLD_W - 80), y, 'cane_post').setOrigin(0.5, 1).setDepth(y); }
-    for (let i = 0; i < 18; i++) { const y = rnd(140, WORLD_H - 80); this.add.image(rnd(80, WORLD_W - 80), y, 'present').setOrigin(0.5, 1).setDepth(y).setTint(0xaab4d6).setScale(1.2); }
+    for (let i = 0; i < 14; i++) { const y = rnd(140, WORLD_H - 80); this.add.image(rnd(80, WORLD_W - 80), y, 'lamp').setOrigin(0.5, 1).setDepth(y); }
     for (let i = 0; i < 40; i++) {
       const s = this.add.image(rnd(40, WORLD_W - 40), rnd(70, WORLD_H - 40), 'spark').setDepth(1).setAlpha(0);
       this.tweens.add({ targets: s, alpha: 0.9, duration: rnd(700, 1800), yoyo: true, repeat: -1, delay: rnd(0, 2000) });
@@ -753,10 +753,20 @@ export default class GameScene extends Phaser.Scene {
 
   spawnPresent(x, y) {
     if (this.presentList.length >= 6) return;
-    const p = this.add.image(Phaser.Math.Clamp(x, 80, WORLD_W - 80), Phaser.Math.Clamp(y, 110, WORLD_H - 80), 'present').setScale(1.4);
-    p.born = this.runMs; p.baseY = p.y;
-    this.tweens.add({ targets: p, scale: 1.7, duration: 500, yoyo: true, repeat: -1 });
+    const px = Phaser.Math.Clamp(x, 80, WORLD_W - 80), py = Phaser.Math.Clamp(y, 110, WORLD_H - 80);
+    // Real presents glow gold and pulse, so they can never be mistaken for scenery.
+    const glow = this.add.circle(px, py, 20, 0xffcf4a, 0.4).setStrokeStyle(2, 0xffffff, 0.7).setDepth(py - 1);
+    this.tweens.add({ targets: glow, scale: { from: 1, to: 1.9 }, alpha: { from: 0.5, to: 0.08 }, duration: 800, repeat: -1 });
+    const p = this.add.image(px, py, 'present').setScale(1.5);
+    p.born = this.runMs; p.glow = glow;
+    this.tweens.add({ targets: p, scale: 1.8, duration: 450, yoyo: true, repeat: -1 });
     this.presentList.push(p);
+  }
+
+  discardPresent(p) {
+    this.tweens.killTweensOf(p);
+    if (p.glow) { this.tweens.killTweensOf(p.glow); p.glow.destroy(); }
+    p.destroy();
   }
 
   updatePresents(delta) {
@@ -769,9 +779,9 @@ export default class GameScene extends Phaser.Scene {
     for (let i = this.presentList.length - 1; i >= 0; i--) {
       const p = this.presentList[i];
       p.setDepth(p.y);
-      if (this.runMs - p.born > 45000) { this.tweens.killTweensOf(p); p.destroy(); this.presentList.splice(i, 1); continue; }
+      if (this.runMs - p.born > 45000) { this.discardPresent(p); this.presentList.splice(i, 1); continue; }
       if (Math.hypot(this.player.x - p.x, this.player.y - p.y) < 30) {
-        this.tweens.killTweensOf(p); p.destroy(); this.presentList.splice(i, 1);
+        this.discardPresent(p); this.presentList.splice(i, 1);
         this.openPresent();
       }
     }

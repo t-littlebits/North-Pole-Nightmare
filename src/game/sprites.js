@@ -32,6 +32,10 @@ const E_GINGER = [
   '..BB....BB..', '.BBBB..BBBB.', '.BBBBBBBBBB.', '..BKBBBBKB..', '..BBBBBBBB..', '..BIKIKIKI..',
   '..BBBBBBBB..', 'BBBBBRRBBBBB', 'BB.BBBBBB.BB', '...BBBBBB...', '...BB..BB...', '..III..III..'
 ];
+const E_ELF = [
+  '.......RRY..', '....RRRRRR..', '...RRRRRRR..', '..RRRRRRRR..', '..WWWWWWWW..', '.SSESSSSESS.',
+  '.SSSSSSSSSS.', '..SSFSSFSS..', '..GGGGGGGG.L', '.SGGGBBGGGSL', '..GG....GG.H', '..BB....BB..'
+];
 const GHOST = [
   '....RRRR....', '...RRRRRR.W.', '..WWWWWWWW..', '.WWWWWWWWWW.', '.WWKKWWKKWW.', '.WWKKWWKKWW.',
   '.WWWWKKWWWW.', '.WWWWKKWWWW.', '.WWWWWWWWWW.', '.WWWWWWWWWW.', '.WW.WWWW.WW.', '..W..WW..W..'
@@ -45,7 +49,7 @@ export const SPRITES = {
   knight: { rows: KNIGHT, pal: { B: '#b5651d', I: '#ffffff', S: '#aab4c4', K: '#1b1b2f', R: '#d7263d' } },
   // enemies
   e_snowman: { rows: E_SNOWMAN, pal: { W: '#dff3ff', I: '#8fb8d8', K: '#1b1b2f', R: '#ff2a2a', O: '#ff8c1a' } },
-  e_elf: { rows: ELF, pal: { G: '#4b1d6b', R: '#111111', S: '#9bd36a', K: '#ff2a2a', Y: '#ff2a2a', B: '#222222' } },
+  e_elf: { rows: E_ELF, pal: { R: '#b3122e', Y: '#ffcf4a', W: '#ffffff', S: '#e8b896', E: '#ff2a2a', F: '#ffffff', G: '#1f6f4a', B: '#3b2a20', L: '#d6dde8', H: '#7a4a1a' } },
   e_gingerbread: { rows: E_GINGER, pal: { B: '#8a4b14', I: '#f3f3f3', K: '#1b1b2f', R: '#ff2a2a' } },
   e_reindeer: { rows: REINDEER, pal: { N: '#4a2f2a', D: '#1d1210', T: '#7a4a3a', A: '#e8e0c8', K: '#ff2a2a', R: '#ff0000' } },
   e_ghost: { rows: GHOST, pal: { W: '#cfe9ff', K: '#12202e', R: '#d7263d' } }

@@ -48,6 +48,11 @@ netlify dev        # serves the site and /.netlify/functions/*
 ### 4. Deploy
 Push to GitHub, then Netlify → **Add new site → Import from Git**. Build command `npm run build`, publish directory `dist`, functions directory `netlify/functions` (all preset by `netlify.toml`). Add the four env vars and deploy.
 
+## Troubleshooting Supabase (403 / 404 in the API logs)
+1. Make sure `supabase/schema.sql` ran without errors (SQL Editor). If it did, run `supabase/fix-grants.sql` as well: newer projects do not auto-grant Data API access to new tables and functions.
+2. `VITE_SUPABASE_URL` must be just `https://<ref>.supabase.co` (no `/rest/v1`, no trailing slash).
+3. After changing env vars on Netlify, trigger a fresh deploy.
+
 ## How security works
 
 - Browsers can **read** public data (leaderboard, public profiles) and their own rows. They can **not** write scores, coins, inventory, boosts or advent claims: row-level security has no write policies for those tables.

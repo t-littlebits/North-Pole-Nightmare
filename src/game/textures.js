@@ -67,6 +67,11 @@ export function buildTextures(scene, character, skinId) {
     for (let y = 0; y < 14; y++) rect(ctx, y % 2 ? '#ffffff' : '#d7263d', 6, 12 + y * 3, 6, 3);
     rect(ctx, '#d7263d', 6, 6, 12, 6); rect(ctx, '#ffffff', 12, 6, 6, 3); rect(ctx, '#d7263d', 12, 12, 6, 6);
   });
+  make('lamp', 24, 60, (ctx) => {
+    rect(ctx, '#2b2f3f', 10, 18, 4, 40); rect(ctx, '#2b2f3f', 6, 56, 12, 4);
+    rect(ctx, '#2b2f3f', 6, 6, 12, 4); rect(ctx, '#ffe9a0', 8, 10, 8, 8); rect(ctx, '#ffffff', 10, 12, 4, 4); rect(ctx, '#2b2f3f', 8, 2, 8, 4);
+    rect(ctx, '#d7263d', 4, 20, 4, 4); rect(ctx, '#35c27a', 16, 26, 4, 4); rect(ctx, '#d7263d', 4, 32, 4, 4);
+  });
   make('snowpile', 48, 18, (ctx) => {
     rect(ctx, '#f6fbff', 6, 6, 36, 12); rect(ctx, '#ffffff', 12, 0, 24, 6); rect(ctx, '#d3e6f5', 6, 12, 36, 6); rect(ctx, '#f6fbff', 0, 12, 48, 6);
   });
