@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { adventYear } from '../../shared/rules.js';
 import { USERNAME_RE } from '../../shared/rules.js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
+const cleanUrl = (v) => (v ? v.trim().replace(/\/(rest|auth)\/v1\/?$/, '').replace(/\/+$/, '') : v);
+const url = cleanUrl(import.meta.env.VITE_SUPABASE_URL);
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const hasSupabase = Boolean(url && anon);
 export const supabase = hasSupabase ? createClient(url, anon) : null;

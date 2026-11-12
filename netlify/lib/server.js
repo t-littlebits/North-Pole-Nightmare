@@ -4,8 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 export const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
+const cleanUrl = (v) => (v ? v.trim().replace(/\/(rest|auth)\/v1\/?$/, '').replace(/\/+$/, '') : v);
+
 export function admin() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const url = cleanUrl(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Server is missing Supabase credentials');
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });

@@ -1,8 +1,5 @@
 # North Pole Nightmare
 
->[!NOTE]
->This was completely coded by Claude
-
 A pixel-art Christmas survival arena. React + Vite site, Phaser 3 game, Supabase accounts/leaderboard, Netlify hosting and functions.
 
 **No keys? No problem.** Without Supabase credentials the whole game runs in **demo mode**: accounts, progress, shop, advent calendar and a local leaderboard (with practice rivals) are saved in your browser.
