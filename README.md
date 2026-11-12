@@ -51,6 +51,17 @@ Push to GitHub, then Netlify → **Add new site → Import from Git**. Build com
 3. Functions crash with a "WebSocket library missing" stack trace: run `npm install` (installs `ws`, which the functions pass to supabase-js) and commit the updated `package-lock.json`.
 4. After changing env vars on Netlify, trigger a fresh deploy.
 
+## Updating an existing install (titles)
+If you set up the database before titles existed, run `supabase/update-2-titles.sql` once in the SQL Editor (new installs get everything from `schema.sql`), then redeploy.
+
+## Giving yourself the Owner title
+Titles that are earned in-game (kills, waves, bosses, advent, collection...) unlock automatically. Manual titles (`owner`, `founder`) can only be granted from the Supabase SQL Editor, which nobody else can reach:
+
+```sql
+select public.grant_title('YourUsername', 'owner');
+```
+It unlocks the title and equips it if you have none equipped. Equip or swap it any time on **Collection → Titles**. (In demo mode, Settings has a button that does the same locally.)
+
 ## How security works
 
 - Browsers can **read** public data (leaderboard, public profiles) and their own rows. They can **not** write scores, coins, inventory, boosts or advent claims: row-level security has no write policies for those tables.
@@ -78,6 +89,10 @@ tests/         node:test suites (+ a mock Phaser for headless runs)
 ```
 
 ## Game notes
+- **Bosses** have two phases. Each boss cycles through its own attacks (rings, aimed fans, spirals, telegraphed slams and rain, minion summons, charges, blinks) and goes **enraged** at 50% HP with a brief invulnerable roar, faster movement and a harder move list.
+- **Arenas:** Santa's Village (default), Frozen Lake (slippery ice, wave 5), Gingerbread Town (sticky syrup, wave 8), Haunted Workshop (ghosts from wave 1, flickering dark, +25% XP, wave 12). Reach the wave in any run to unlock; the server checks it.
+- **Weapon mods:** a weapon at level 3 offers a mod, and a second one at level 6 (3 mods per weapon, e.g. Splitter snowballs, Burning Glaze bombs, Echo Frost).
+- **Hero abilities:** Snowman *Blizzard Storm*, Reindeer *Red Nose Beam*, Gingerbread Knight *Gingerbread Garrison*.
 - Heroes: Santa, Elf (free); Snowman, Reindeer, Gingerbread Knight (coins or Advent).
 - Weapons: snowballs, candy canes, ice blast (free); Christmas bells, gingerbread bombs (coins or Advent). Unlocked weapons join the level-up pool.
 - Upgrades come in Common / Rare / Epic / Legendary; luck and wave number shift the odds.

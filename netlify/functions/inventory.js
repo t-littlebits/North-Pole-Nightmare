@@ -1,5 +1,7 @@
 import { handler, json } from '../lib/server.js';
 import { BOOSTS, CHARACTERS, SKINS, WEAPONS } from '../../src/data/catalog.js';
+import { TITLE_BY_ID } from '../../src/data/titles.js';
+import { awardTitles } from '../lib/titles.js';
 
 const owns = async (sb, uid, type, id) => {
   const { data } = await sb.from('inventory').select('item_id').eq('user_id', uid).eq('item_type', type).eq('item_id', id).maybeSingle();
@@ -21,7 +23,7 @@ export default handler(async ({ sb, user, body }) => {
       const m = error.message;
       return json(400, { error: m.includes('not_enough_coins') ? 'Not enough coins' : m.includes('already_owned') ? 'You already own this' : 'Purchase failed' });
     }
-    return json(200, { ok: true });
+    return json(200, { ok: true, newTitles: await awardTitles(sb, user.id) });
   }
 
   if (action === 'select') {
@@ -46,6 +48,18 @@ export default handler(async ({ sb, user, body }) => {
     }
     const { error } = await sb.from('profiles').update({ active_boost: id }).eq('id', user.id);
     return error ? json(500, { error: 'Could not save' }) : json(200, { ok: true });
+  }
+  if (action === 'title') {
+    const id = body.id || null;
+    if (id) {
+      if (!TITLE_BY_ID[id]) return json(400, { error: 'Unknown title' });
+      const { data } = await sb.from('user_titles').select('title_id').eq('user_id', user.id).eq('title_id', id).maybeSingle();
+      if (!data) return json(403, { error: 'Title not unlocked' });
+    }
+    const { error } = await sb.from('profiles').update({ equipped_title: id }).eq('id', user.id);
+    if (error) return json(500, { error: 'Could not save' });
+    await sb.from('leaderboard').update({ title: id }).eq('user_id', user.id);
+    return json(200, { ok: true });
   }
   return json(400, { error: 'Unknown action' });
 });

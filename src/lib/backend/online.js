@@ -58,16 +58,17 @@ export const online = {
     const user = data.session?.user;
     if (!user) return null;
     const year = adventYear(new Date());
-    const [p, inv, cl] = await Promise.all([
+    const [p, inv, cl, tt] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('inventory').select('item_type,item_id').eq('user_id', user.id),
-      supabase.from('advent_claims').select('year,day').eq('user_id', user.id).eq('year', year)
+      supabase.from('advent_claims').select('year,day').eq('user_id', user.id).eq('year', year),
+      supabase.from('user_titles').select('title_id').eq('user_id', user.id)
     ]);
     if (p.error) return null;
-    return { user: { id: user.id, username: p.data.username }, profile: p.data, inventory: inv.data || [], claims: cl.data || [] };
+    return { user: { id: user.id, username: p.data.username }, profile: p.data, inventory: inv.data || [], claims: cl.data || [], titles: (tt.data || []).map((t) => t.title_id) };
   },
 
-  startRun: (character) => call('start-run', { character }),
+  startRun: (character, arena = 'village') => call('start-run', { character, arena }),
   submitRun: (runId, stats) => call('submit-score', { runId, stats }),
 
   async getLeaderboard(limit = 50) {
@@ -86,6 +87,7 @@ export const online = {
   buy: (type, id) => call('inventory', { action: 'buy', type, id }),
   select: ({ character, skin }) => call('inventory', { action: 'select', character, skin }),
   setBoost: (id) => call('inventory', { action: 'boost', id }),
+  equipTitle: (id) => call('inventory', { action: 'title', id }),
 
   async saveSettings(settings) {
     const { data } = await supabase.auth.getSession();
@@ -94,7 +96,7 @@ export const online = {
   },
 
   async searchPlayers(q) {
-    let query = supabase.from('public_profiles').select('id,username,selected_character,equipped,games_played,best_score,best_wave').order('best_score', { ascending: false }).limit(20);
+    let query = supabase.from('public_profiles').select('id,username,selected_character,equipped,equipped_title,games_played,best_score,best_wave').order('best_score', { ascending: false }).limit(20);
     const needle = (q || '').trim();
     if (needle) query = query.ilike('username', `%${esc(needle)}%`);
     const { data, error } = await query;

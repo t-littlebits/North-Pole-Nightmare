@@ -17,6 +17,7 @@ create table if not exists public.profiles (
   equipped jsonb not null default '{}'::jsonb,      -- {"santa": "santa_frost", ...}
   boosts jsonb not null default '{}'::jsonb,        -- {"xp_boost": 2, ...}
   active_boost text,
+  equipped_title text,
   settings jsonb not null default '{}'::jsonb,
   games_played int not null default 0,
   total_kills int not null default 0,
@@ -70,6 +71,7 @@ create table if not exists public.leaderboard (     -- one row per player: their
   wave int not null,
   kills int not null,
   character text not null,
+  title text,
   achieved_at timestamptz not null default now()
 );
 create index if not exists leaderboard_score_idx on public.leaderboard (score desc);
@@ -83,6 +85,14 @@ create table if not exists public.advent_claims (
   primary key (user_id, year, day)
 );
 
+create table if not exists public.user_titles (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  title_id text not null,
+  source text not null default 'achievement',   -- 'achievement' or 'admin'
+  granted_at timestamptz not null default now(),
+  primary key (user_id, title_id)
+);
+
 -- ---------- Row level security ----------
 alter table public.profiles enable row level security;
 alter table public.inventory enable row level security;
@@ -90,6 +100,7 @@ alter table public.runs enable row level security;
 alter table public.scores enable row level security;
 alter table public.leaderboard enable row level security;
 alter table public.advent_claims enable row level security;
+alter table public.user_titles enable row level security;
 
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles for select using (auth.uid() = id);
@@ -102,6 +113,9 @@ create policy "own inventory" on public.inventory for select using (auth.uid() =
 drop policy if exists "own claims" on public.advent_claims;
 create policy "own claims" on public.advent_claims for select using (auth.uid() = user_id);
 
+drop policy if exists "own titles" on public.user_titles;
+create policy "own titles" on public.user_titles for select using (auth.uid() = user_id);
+
 drop policy if exists "public scores" on public.scores;
 create policy "public scores" on public.scores for select using (true);
 
@@ -113,13 +127,13 @@ create policy "public leaderboard" on public.leaderboard for select using (true)
 -- Browsers may only edit the harmless `settings` column of their own profile.
 revoke insert, update, delete on public.profiles from anon, authenticated;
 grant update (settings) on public.profiles to authenticated;
-revoke insert, update, delete on public.inventory, public.runs, public.scores, public.leaderboard, public.advent_claims from anon, authenticated;
+revoke insert, update, delete on public.inventory, public.runs, public.scores, public.leaderboard, public.advent_claims, public.user_titles from anon, authenticated;
 
 -- Public, non-sensitive view for profile pages and username search (hides coins, boosts, settings).
 -- (Supabase may flag this as a "security definer view"; that is intentional here.)
 create or replace view public.public_profiles as
   select id, username, selected_character, equipped, games_played, total_kills, total_score,
-         best_score, best_wave, total_seconds, bosses_defeated, presents_opened, created_at
+         best_score, best_wave, total_seconds, bosses_defeated, presents_opened, created_at, equipped_title
   from public.profiles;
 grant select on public.public_profiles to anon, authenticated;
 
@@ -174,12 +188,12 @@ create or replace function public.apply_run(
   p_run uuid, p_user uuid, p_score int, p_wave int, p_kills int, p_bosses int,
   p_seconds int, p_presents int, p_coins int, p_character text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare r runs%rowtype; prev int; uname text; rnk int;
+declare r runs%rowtype; prev int; uname text; ttl text; rnk int;
 begin
   select * into r from runs where id = p_run and user_id = p_user for update;
   if not found or r.submitted then raise exception 'invalid_run'; end if;
   update runs set submitted = true where id = p_run;
-  select best_score, username into prev, uname from profiles where id = p_user;
+  select best_score, username, equipped_title into prev, uname, ttl from profiles where id = p_user;
   insert into scores (user_id, username, score, wave, kills, bosses, seconds, character)
     values (p_user, uname, p_score, p_wave, p_kills, p_bosses, p_seconds, p_character);
   update profiles set
@@ -188,11 +202,11 @@ begin
     best_wave = greatest(best_wave, p_wave), total_seconds = total_seconds + p_seconds,
     bosses_defeated = bosses_defeated + p_bosses, presents_opened = presents_opened + p_presents
   where id = p_user;
-  insert into leaderboard (user_id, username, score, wave, kills, character)
-    values (p_user, uname, p_score, p_wave, p_kills, p_character)
+  insert into leaderboard (user_id, username, score, wave, kills, character, title)
+    values (p_user, uname, p_score, p_wave, p_kills, p_character, ttl)
   on conflict (user_id) do update set
     score = excluded.score, wave = excluded.wave, kills = excluded.kills,
-    character = excluded.character, achieved_at = now()
+    character = excluded.character, title = excluded.title, achieved_at = now()
     where leaderboard.score < excluded.score;
   select count(*) + 1 into rnk from leaderboard where score > (select score from leaderboard where user_id = p_user);
   return jsonb_build_object('is_best', p_score > prev, 'prev_best', prev, 'rank', rnk);
@@ -238,12 +252,29 @@ grant execute on function public.apply_run(uuid, uuid, int, int, int, int, int, 
 grant execute on function public.claim_advent(uuid, int, int, jsonb) to service_role;
 grant execute on function public.buy_item(uuid, text, text, int) to service_role;
 
+-- ---------- Owner / admin titles ----------
+-- Run this yourself in the Supabase SQL Editor to hand out a manual title (e.g. 'owner' or 'founder'):
+--   select public.grant_title('YourUsername', 'owner');
+-- Nobody else can call it: it is not exposed to the browser or the anon/authenticated roles.
+create or replace function public.grant_title(p_username text, p_title text) returns text
+language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  select id into uid from public.profiles where lower(username) = lower(p_username);
+  if uid is null then raise exception 'No such player: %', p_username; end if;
+  insert into public.user_titles (user_id, title_id, source) values (uid, p_title, 'admin') on conflict do nothing;
+  update public.profiles set equipped_title = p_title where id = uid and equipped_title is null;
+  update public.leaderboard set title = p_title where user_id = uid and title is null;
+  return 'Granted ' || p_title || ' to ' || p_username;
+end $$;
+revoke all on function public.grant_title(text, text) from public, anon, authenticated;
+
 -- ---------- Explicit grants ----------
 -- Newer Supabase projects do NOT automatically expose new tables/functions to the Data API,
 -- which shows up as 403 (permission denied) and 404 (function/table not found) in the logs.
 grant usage on schema public to anon, authenticated, service_role;
 grant select on public.leaderboard, public.scores to anon, authenticated;
-grant select on public.profiles, public.inventory, public.advent_claims to authenticated;
+grant select on public.profiles, public.inventory, public.advent_claims, public.user_titles to authenticated;
 grant select on public.public_profiles to anon, authenticated;
 grant update (settings) on public.profiles to authenticated;
 grant all on all tables in schema public to service_role;

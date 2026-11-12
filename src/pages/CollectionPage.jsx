@@ -5,13 +5,15 @@ import { backend } from '../lib/backend/index.js';
 import { CHARACTERS, CHARACTER_IDS, SKINS, WEAPONS, BOOSTS, RARITIES } from '../data/catalog.js';
 import { ADVENT_REWARDS } from '../data/advent.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
+import { TITLES, titleProgress } from '../data/titles.js';
+import TitleTag from '../components/TitleTag.jsx';
 
 const adventDay = {};
 ADVENT_REWARDS.forEach((r) => r.grants.forEach((g) => { adventDay[`${g.type}:${g.id}`] = r.day; }));
-const TABS = ['Heroes', 'Skins', 'Weapons', 'Boosts'];
+const TABS = ['Heroes', 'Skins', 'Weapons', 'Boosts', 'Titles'];
 
 export default function CollectionPage() {
-  const { user, profile, owns, skinFor, act, setAuthOpen } = useApp();
+  const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims } = useApp();
   const [tab, setTab] = useState('Heroes');
   const needAuth = () => { if (!user) { setAuthOpen(true); return true; } return false; };
   const buy = (type, id, name) => { if (!needAuth()) act(() => backend.buy(type, id), `Unlocked ${name}!`); };
@@ -20,6 +22,10 @@ export default function CollectionPage() {
   const total = CHARACTER_IDS.length + Object.keys(SKINS).length + Object.keys(WEAPONS).length;
   const have = CHARACTER_IDS.filter((c) => owns('character', c)).length + Object.keys(SKINS).filter((s) => owns('skin', s)).length + Object.keys(WEAPONS).filter((w) => owns('weapon', w)).length;
   const boosts = Object.entries(profile?.boosts || {}).filter(([, n]) => n > 0);
+  const stats = {
+    ...(profile || {}), advent_claims: claims.length,
+    heroes_owned: CHARACTER_IDS.filter((c) => owns('character', c)).length, skins_owned: Object.keys(SKINS).filter((s) => owns('skin', s)).length
+  };
 
   const Price = ({ price }) => <span className="gold">🪙 {price}</span>;
   const Source = ({ type, id, price, buyable }) => (buyable && price > 0 ? <Price price={price} /> : adventDay[`${type}:${id}`] ? <span className="muted">Advent day {adventDay[`${type}:${id}`]}</span> : null);
@@ -84,6 +90,26 @@ export default function CollectionPage() {
             );
           })}
         </div>
+      )}
+
+      {tab === 'Titles' && (
+        <>
+          <p className="muted">Titles show next to your name on the leaderboard and your profile. Earn them by playing.{profile?.equipped_title && <> Equipped: <TitleTag id={profile.equipped_title} /></>}</p>
+          <div className="grid items">
+            {TITLES.filter((t) => !t.manual || titles.includes(t.id)).map((t) => {
+              const has = titles.includes(t.id), equipped = profile?.equipped_title === t.id;
+              const [cur, target] = titleProgress(t, stats);
+              return (
+                <div key={t.id} className={`panel item ${has ? '' : 'locked'}`}>
+                  <TitleTag id={t.id} />
+                  <span className="small-text">{t.desc}</span>
+                  {has ? <button className="btn small" onClick={() => act(() => backend.equipTitle(equipped ? null : t.id), equipped ? 'Title removed' : 'Title equipped')}>{equipped ? 'Remove' : 'Equip'}</button>
+                    : <div className="progress" aria-label={`${cur} of ${target}`}><i style={{ width: `${(cur / target) * 100}%` }} /><span>{cur.toLocaleString()} / {target.toLocaleString()}</span></div>}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {tab === 'Boosts' && (

@@ -18,17 +18,17 @@ export const CHARACTERS = {
   snowman: {
     id: 'snowman', name: 'Snowman', hp: 160, speed: 120, weapon: 'iceblast', price: 500,
     blurb: 'Slow, huge health pool, and utterly unbothered by the cold.',
-    ability: { id: 'blizzard', name: 'Blizzard', cd: 14, desc: 'Freezes every enemy around you for three seconds.' }
+    ability: { id: 'blizzardstorm', name: 'Blizzard Storm', cd: 16, desc: 'Summons a roaring storm around you for 5 seconds that slows and shreds enemies, then shatters in a freezing burst.' }
   },
   reindeer: {
     id: 'reindeer', name: 'Reindeer', hp: 100, speed: 170, weapon: 'bells', price: 800,
     blurb: 'Jingles constantly. Enemies hear it coming, and that is the plan.',
-    ability: { id: 'antlercharge', name: 'Antler Charge', cd: 7, desc: 'Charge forward and smash through enemies in your path.' }
+    ability: { id: 'rednosebeam', name: 'Red Nose Beam', cd: 12, desc: 'Your nose blazes into a sweeping beam that spins around you for 3 seconds, burning everything it touches.' }
   },
   knight: {
     id: 'knight', name: 'Gingerbread Knight', hp: 140, speed: 135, weapon: 'bomb', price: 1200,
     blurb: 'Baked for battle. Armoured in icing, armed with explosives.',
-    ability: { id: 'icingshield', name: 'Icing Shield', cd: 12, desc: 'A sugar shield absorbs 60 damage for five seconds.' }
+    ability: { id: 'garrison', name: 'Gingerbread Garrison', cd: 14, desc: 'Bakes three cookie soldiers that hunt down enemies for 8 seconds.' }
   }
 };
 export const CHARACTER_IDS = Object.keys(CHARACTERS);
@@ -73,12 +73,18 @@ export const ENEMIES = {
 };
 export const MAX_POINTS_PER_KILL = 60; // elite reindeer: 20 * 3
 
+// Bosses have two phases (switching at 50% HP). `moves` are the attack patterns they cycle through in each phase.
 export const BOSSES = [
-  { id: 'frostking', name: 'The Frost King', base: 'snowman', tint: 0x66ccff, scale: 3.4, hpMul: 1, speed: 42, dmg: 18, shots: 8 },
-  { id: 'elfoverlord', name: 'Elf Overlord', base: 'elf', tint: 0xff66ff, scale: 3.4, hpMul: 0.9, speed: 70, dmg: 16, shots: 10 },
-  { id: 'titan', name: 'Gingerbread Titan', base: 'gingerbread', tint: 0xffaa33, scale: 3.8, hpMul: 1.25, speed: 46, dmg: 22, shots: 12 },
-  { id: 'blitzen', name: 'Blitzen the Cursed', base: 'reindeer', tint: 0xff4444, scale: 3.4, hpMul: 1.1, speed: 62, dmg: 22, shots: 10 },
-  { id: 'neverghost', name: 'Ghost of Christmas Never', base: 'ghost', tint: 0x99ffcc, scale: 3.8, hpMul: 1, speed: 58, dmg: 20, shots: 14 }
+  { id: 'frostking', name: 'The Frost King', base: 'snowman', tint: 0x66ccff, scale: 3.4, hpMul: 1, speed: 42, dmg: 18, shots: 8, minion: null,
+    moves: { 1: ['ring', 'fan'], 2: ['rain', 'spiral', 'ring'] } },
+  { id: 'elfoverlord', name: 'Elf Overlord', base: 'elf', tint: 0xff66ff, scale: 3.4, hpMul: 0.9, speed: 70, dmg: 16, shots: 10, minion: 'elf',
+    moves: { 1: ['fan', 'summon'], 2: ['spiral', 'dash', 'summon'] } },
+  { id: 'titan', name: 'Gingerbread Titan', base: 'gingerbread', tint: 0xffaa33, scale: 3.8, hpMul: 1.25, speed: 46, dmg: 22, shots: 12, minion: 'gingerbread',
+    moves: { 1: ['slam', 'ring'], 2: ['slam', 'summon', 'rain'] } },
+  { id: 'blitzen', name: 'Blitzen the Cursed', base: 'reindeer', tint: 0xff4444, scale: 3.4, hpMul: 1.1, speed: 62, dmg: 22, shots: 10, minion: null,
+    moves: { 1: ['dash', 'fan'], 2: ['dash', 'dash', 'ring'] } },
+  { id: 'neverghost', name: 'Ghost of Christmas Never', base: 'ghost', tint: 0x99ffcc, scale: 3.8, hpMul: 1, speed: 58, dmg: 20, shots: 14, minion: 'ghost',
+    moves: { 1: ['spiral', 'ring'], 2: ['blink', 'rain', 'summon'] } }
 ];
 
 export const RARITIES = {

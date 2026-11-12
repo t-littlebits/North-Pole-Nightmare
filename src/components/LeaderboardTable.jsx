@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Hero } from './Sprite.jsx';
 import { CHARACTERS } from '../data/catalog.js';
+import TitleTag from './TitleTag.jsx';
 
 const medal = (i) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1);
 
@@ -20,6 +21,7 @@ export default function LeaderboardTable({ rows, meId, compact = false }) {
                   {CHARACTERS[r.character] && <Hero character={r.character} px={2} title="" />}
                   <span>{r.username}</span>
                 </Link>
+                {r.title && <TitleTag id={r.title} />}
               </td>
               <td className="num">{r.score.toLocaleString()}</td>
               {!compact && <><td className="num">{r.wave}</td><td className="num">{r.kills.toLocaleString()}</td></>}

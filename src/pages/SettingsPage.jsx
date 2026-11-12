@@ -3,7 +3,7 @@ import { backend } from '../lib/backend/index.js';
 import { sfx } from '../game/audio.js';
 
 export default function SettingsPage() {
-  const { settings, setSetting, user, setAuthOpen, isDemo, showToast } = useApp();
+  const { settings, setSetting, user, setAuthOpen, isDemo, showToast, act } = useApp();
   const Toggle = ({ k, label, hint }) => (
     <label className="toggle"><input type="checkbox" checked={!!settings[k]} onChange={(e) => setSetting({ [k]: e.target.checked })} /><span><b>{label}</b>{hint && <small>{hint}</small>}</span></label>
   );
@@ -36,6 +36,7 @@ export default function SettingsPage() {
         {isDemo && (
           <div className="danger">
             <p className="muted">Demo mode keeps everything in this browser.</p>
+            {user && <button className="btn ghost" onClick={() => act(() => backend.grantOwner(), 'Owner title granted (demo only)')}>Grant myself the Owner title</button>}
             <button className="btn ghost" onClick={async () => { if (window.confirm('Delete all demo players and progress on this device?')) { await backend.resetAll(); showToast('Demo data cleared', 'ok'); } }}>Reset demo data</button>
           </div>
         )}

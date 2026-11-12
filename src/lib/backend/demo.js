@@ -4,6 +4,8 @@ import { CHARACTERS, SKINS, WEAPONS, BOOSTS, DEFAULT_WEAPONS, CHARACTER_IDS, def
 import { validateRun, checkClaim, adventYear } from '../../shared/rules.js';
 import { USERNAME_RE } from '../../shared/rules.js';
 import { clock } from '../clock.js';
+import { arenaUnlocked } from '../../data/arenas.js';
+import { evaluateTitles } from '../../data/titles.js';
 
 const KEY = 'npn.demo.v1';
 const authSubs = new Set();
@@ -26,7 +28,24 @@ function load() {
 let db = load();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* storage full/unavailable */ } };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
-const me = () => (db.session ? db.users[db.session] : null);
+const me = () => {
+  const u = db.session ? db.users[db.session] : null;
+  if (u) { u.titles ||= []; if (u.profile.equipped_title === undefined) u.profile.equipped_title = null; }
+  return u;
+};
+
+/** Mirror of the server's awardTitles: grant any newly earned titles and auto-equip the first one. */
+function awardTitles(u) {
+  const stats = {
+    ...u.profile, advent_claims: u.claims.length,
+    heroes_owned: u.inventory.filter((i) => i.item_type === 'character').length,
+    skins_owned: u.inventory.filter((i) => i.item_type === 'skin').length
+  };
+  const fresh = evaluateTitles(stats).filter((id) => !u.titles.includes(id));
+  u.titles.push(...fresh);
+  if (fresh.length && !u.profile.equipped_title) u.profile.equipped_title = fresh[0];
+  return fresh;
+}
 const notifyAuth = () => authSubs.forEach((f) => f());
 const notifyLb = () => lbSubs.forEach((f) => f());
 
@@ -38,11 +57,11 @@ function newUser(username) {
     ...CHARACTER_IDS.map((c) => ({ item_type: 'skin', item_id: defaultSkinFor(c) }))
   ];
   return {
-    id, username, inventory, claims: [], runs: {}, scores: [],
+    id, username, inventory, claims: [], runs: {}, scores: [], titles: [],
     profile: {
       id, username, coins: 0, selected_character: 'santa', equipped: {}, boosts: {}, active_boost: null,
       games_played: 0, total_kills: 0, total_score: 0, best_score: 0, best_wave: 0, total_seconds: 0,
-      bosses_defeated: 0, presents_opened: 0, created_at: new Date().toISOString()
+      bosses_defeated: 0, presents_opened: 0, equipped_title: null, created_at: new Date().toISOString()
     }
   };
 }
@@ -53,7 +72,7 @@ const fail = (msg) => { throw new Error(msg); };
 function leaderboardRows() {
   const real = Object.values(db.users).filter((u) => u.profile.best_score > 0).map((u) => {
     const best = u.scores.reduce((a, s) => (s.score > (a?.score ?? -1) ? s : a), null);
-    return { user_id: u.id, username: u.username, score: u.profile.best_score, wave: u.profile.best_wave, kills: best?.kills ?? 0, character: best?.character ?? u.profile.selected_character, achieved_at: best?.created_at ?? u.profile.created_at };
+    return { user_id: u.id, username: u.username, score: u.profile.best_score, wave: u.profile.best_wave, kills: best?.kills ?? 0, character: best?.character ?? u.profile.selected_character, achieved_at: best?.created_at ?? u.profile.created_at, title: u.profile.equipped_title || null };
   });
   const bots = BOTS.map((b) => ({ user_id: b.id, username: b.username, score: b.best_score, wave: b.best_wave, kills: b.kills, character: b.character, achieved_at: b.created_at }));
   return [...real, ...bots].sort((a, b) => b.score - a.score);
@@ -88,11 +107,12 @@ export const demo = {
     const u = me();
     if (!u) return null;
     const year = adventYear(clock.now());
-    return { user: { id: u.id, username: u.username }, profile: { ...u.profile }, inventory: [...u.inventory], claims: u.claims.filter((c) => c.year === year) };
+    return { user: { id: u.id, username: u.username }, profile: { ...u.profile }, inventory: [...u.inventory], claims: u.claims.filter((c) => c.year === year), titles: [...u.titles] };
   },
 
-  async startRun(character) {
+  async startRun(character, arena = 'village') {
     const u = me() || fail('Sign in first');
+    if (!arenaUnlocked(arena, u.profile.best_wave)) fail('That arena is still locked');
     if (!CHARACTERS[character] || !owns(u, 'character', character)) fail('Character not unlocked');
     let boost = null;
     const b = u.profile.active_boost;
@@ -117,9 +137,10 @@ export const demo = {
     p.coins += r.coins; p.games_played += 1; p.total_kills += r.kills; p.total_score += r.score;
     p.best_score = Math.max(p.best_score, r.score); p.best_wave = Math.max(p.best_wave, r.wave);
     p.total_seconds += r.seconds; p.bosses_defeated += r.bosses; p.presents_opened += r.presents;
+    const newTitles = awardTitles(u);
     save(); notifyLb();
     const rank = leaderboardRows().findIndex((x) => x.user_id === u.id) + 1;
-    return { score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: r.score > prev, prevBest: prev, rank };
+    return { score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: r.score > prev, prevBest: prev, rank, newTitles };
   },
 
   async getLeaderboard(limit = 50) { return leaderboardRows().slice(0, limit); },
@@ -137,8 +158,9 @@ export const demo = {
       else if (g.type === 'boost') u.profile.boosts[g.id] = (u.profile.boosts[g.id] || 0) + (g.amount || 1);
       else give(u, g.type, g.id);
     }
+    const newTitles = awardTitles(u);
     save();
-    return { reward: c.reward };
+    return { reward: c.reward, newTitles };
   },
 
   async buy(type, id) {
@@ -152,6 +174,7 @@ export const demo = {
     if (u.profile.coins < price) fail('Not enough coins');
     u.profile.coins -= price;
     give(u, type, id);
+    awardTitles(u);
     save();
   },
 
@@ -171,6 +194,21 @@ export const demo = {
     if (id && !(BOOSTS[id] && (u.profile.boosts[id] || 0) > 0)) fail('You have none of this boost');
     u.profile.active_boost = id || null;
     save();
+  },
+
+  async equipTitle(id) {
+    const u = me() || fail('Sign in first');
+    if (id && !u.titles.includes(id)) fail('Title not unlocked');
+    u.profile.equipped_title = id || null;
+    save(); notifyLb();
+  },
+
+  /** Demo only: online, the owner title is granted from the Supabase SQL editor (see README). */
+  async grantOwner() {
+    const u = me() || fail('Sign in first');
+    for (const t of ['owner', 'founder']) if (!u.titles.includes(t)) u.titles.push(t);
+    u.profile.equipped_title = 'owner';
+    save(); notifyLb();
   },
 
   async saveSettings() { /* settings already live in localStorage */ },

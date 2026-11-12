@@ -1,5 +1,6 @@
 import { handler, json } from '../lib/server.js';
 import { validateRun } from '../../src/shared/rules.js';
+import { awardTitles } from '../lib/titles.js';
 
 // The client sends raw run stats. The SERVER computes the score and coins,
 // checks the numbers against what is physically possible, and writes the result.
@@ -22,5 +23,6 @@ export default handler(async ({ sb, user, body }) => {
     p_seconds: r.seconds, p_presents: r.presents, p_coins: r.coins, p_character: run.character
   });
   if (error) return json(400, { error: 'Could not save run' });
-  return json(200, { score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: data.is_best, prevBest: data.prev_best, rank: data.rank });
+  const newTitles = await awardTitles(sb, user.id);
+  return json(200, { newTitles, score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: data.is_best, prevBest: data.prev_best, rank: data.rank });
 });

@@ -26,7 +26,7 @@ const key = () => ({ isDown: false });
 export const events = { handlers: {} };
 export const sceneStub = {
   textures: { exists: () => true, createCanvas: () => ({ getContext: () => chain(), refresh() {} }) },
-  add: { tileSprite: () => chain(), image: (x, y, k) => new Sprite(null, x, y, k), circle: () => chain(), text: () => chain(), ellipse: () => chain(), particles: () => chain() },
+  add: { tileSprite: () => chain(), image: (x, y, k) => new Sprite(null, x, y, k), circle: () => chain(), rectangle: () => chain(), triangle: () => chain(), text: () => chain(), ellipse: () => chain(), particles: () => chain() },
   physics: {
     world: { setBounds() {}, pause() {}, resume() {} },
     add: { group: () => new Group(), sprite: (x, y, k) => new Sprite(null, x, y, k), overlap: () => {} }
@@ -40,7 +40,21 @@ export const sceneStub = {
   events: { once() {} }
 };
 
-class Scene { constructor() { Object.assign(this, sceneStub); this.events = { once() {} }; } }
+class Scene {
+  constructor() {
+    Object.assign(this, sceneStub);
+    this.events = { once() {} };
+    this.__ov = [];
+    this.physics = { world: sceneStub.physics.world, add: { group: () => new Group(), sprite: (x, y, k) => new Sprite(null, x, y, k), overlap: (a, b, cb, pc, ctx) => { this.__ov.push({ a, b, cb, ctx }); } } };
+  }
+  // The mock has no physics engine: tests call this to fire overlap callbacks for things that are close together.
+  runOverlaps() {
+    for (const o of this.__ov) {
+      const A = o.a.items ? o.a.items.slice() : [o.a], B = o.b.items ? o.b.items.slice() : [o.b];
+      for (const x of A) for (const y of B) if (x.active && y.active && Math.hypot(x.x - y.x, x.y - y.y) < 22) o.cb.call(o.ctx, x, y);
+    }
+  }
+}
 
 const Phaser = {
   Scene,

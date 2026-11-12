@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { backend } from '../lib/backend/index.js';
 import { CHARACTERS, defaultSkinFor } from '../data/catalog.js';
 import { Hero } from '../components/Sprite.jsx';
+import TitleTag from '../components/TitleTag.jsx';
 
 export default function PlayersPage() {
   const [q, setQ] = useState('');
@@ -29,6 +30,7 @@ export default function PlayersPage() {
             <Link key={p.id} to={`/profile/${p.username}`} className="panel player-row">
               <Hero character={ch} skin={p.equipped?.[ch] || defaultSkinFor(ch)} px={4} />
               <strong>{p.username}</strong>
+              <TitleTag id={p.equipped_title} />
               <span className="muted">Best {p.best_score.toLocaleString()} · wave {p.best_wave}</span>
             </Link>
           );

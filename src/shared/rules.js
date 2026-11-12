@@ -45,7 +45,7 @@ export function validateRun(input, serverElapsedSec) {
   if (r.wave > Math.floor(r.seconds / WAVE_SECONDS) + 1) return { ok: false, error: 'Wave too high for run time' };
   if (r.bosses > Math.floor(r.wave / 5)) return { ok: false, error: 'Too many bosses' };
   if (r.presents > Math.floor(r.seconds / 20) + r.bosses * 3 + Math.floor(r.kills * 0.05) + 2) return { ok: false, error: 'Too many presents' };
-  if (r.kills > maxSpawns(r.seconds) + r.presents * 10) return { ok: false, error: 'More kills than enemies spawned' };
+  if (r.kills > maxSpawns(r.seconds) + r.presents * 10 + Math.floor(r.wave / 5) * 40) return { ok: false, error: 'More kills than enemies spawned' };
   if (r.killPoints > r.kills * MAX_POINTS_PER_KILL) return { ok: false, error: 'Kill points out of range' };
   const score = computeScore(r);
   return { ok: true, run: { ...r, score, coins: coinsForRun({ score, wave: r.wave, bosses: r.bosses }) } };

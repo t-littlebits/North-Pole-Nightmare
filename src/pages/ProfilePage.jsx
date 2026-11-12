@@ -5,6 +5,7 @@ import { backend } from '../lib/backend/index.js';
 import { formatTime } from '../lib/hooks.js';
 import { CHARACTERS, defaultSkinFor } from '../data/catalog.js';
 import { Hero } from '../components/Sprite.jsx';
+import TitleTag from '../components/TitleTag.jsx';
 
 export default function ProfilePage() {
   const { username } = useParams();
@@ -39,6 +40,7 @@ export default function ProfilePage() {
         <Hero character={CHARACTERS[ch] ? ch : 'santa'} skin={skin} px={10} className="bob" />
         <div>
           <h1>{p.username}</h1>
+          <p><TitleTag id={p.equipped_title} /></p>
           <p className="muted">{data.rank ? `All-time rank #${data.rank}` : 'Not ranked yet'} · joined {new Date(p.created_at).toLocaleDateString()}</p>
           <button className="btn small ghost" onClick={share}>Copy profile link</button>
         </div>

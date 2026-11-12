@@ -67,7 +67,7 @@ export function AppProvider({ children }) {
 
   const value = {
     ready, isDemo, user: me?.user || null, profile: me?.profile || null, inventory: me?.inventory || [], claims: me?.claims || [],
-    refresh, owns, skinFor, settings, setSetting, authOpen, setAuthOpen, toast, showToast, act
+    titles: me?.titles || [], refresh, owns, skinFor, settings, setSetting, authOpen, setAuthOpen, toast, showToast, act
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
