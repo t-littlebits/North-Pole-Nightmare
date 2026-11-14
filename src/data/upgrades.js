@@ -1,5 +1,4 @@
 import { RARITIES, RARITY_ORDER, WEAPONS, MAX_WEAPON_LEVEL } from './catalog.js';
-import { MODS, availableMods } from './mods.js';
 
 // Each stat upgrade scales with the rolled rarity multiplier `m`.
 export const STAT_UPGRADES = [
@@ -46,9 +45,6 @@ export function rollUpgrades(ctx, rng = Math.random, count = 3) {
     if (lvl === 0 && owned.length >= 5) continue;
     pool.push({ kind: 'weapon', id, w: lvl === 0 ? 1.8 : 1.3, min: 'common' });
   }
-  for (const wid of owned) {
-    for (const m of availableMods(wid, ctx.weapons[wid], (ctx.mods || {})[wid] || [])) pool.push({ kind: 'mod', id: `${wid}:${m.id}`, w: 0.9, min: 'epic' });
-  }
   const picks = [];
   while (picks.length < count && pool.length) {
     const total = pool.reduce((a, p) => a + p.w, 0);
@@ -57,16 +53,11 @@ export function rollUpgrades(ctx, rng = Math.random, count = 3) {
     for (; idx < pool.length; idx++) { r -= pool[idx].w; if (r <= 0) break; }
     picks.push(pool.splice(Math.min(idx, pool.length - 1), 1)[0]);
   }
-  return picks.map((p) => describeCard(p.kind, p.id, p.kind === 'mod' ? 'epic' : rollRarity(ctx, rng, p.min), ctx));
+  return picks.map((p) => describeCard(p.kind, p.id, rollRarity(ctx, rng, p.min), ctx));
 }
 
 export function describeCard(kind, id, rarity, ctx) {
   const R = RARITIES[rarity];
-  if (kind === 'mod') {
-    const [wid, mid] = id.split(':');
-    const m = MODS[wid].find((x) => x.id === mid);
-    return { kind, id, rarity, weapon: wid, modId: mid, iconWeapon: wid, name: m.name, desc: m.desc, tag: `${WEAPONS[wid].name} mod` };
-  }
   if (kind === 'weapon') {
     const w = WEAPONS[id];
     const lvl = ctx.weapons[id] || 0;
@@ -76,10 +67,8 @@ export function describeCard(kind, id, rarity, ctx) {
   return { kind, id, rarity, icon: u.icon, name: u.name, desc: u.desc(R.mult), mult: R.mult };
 }
 
-export function applyUpgrade(card, stats, weapons, mods = {}) {
-  if (card.kind === 'mod') {
-    (mods[card.weapon] ||= []).push(card.modId);
-  } else if (card.kind === 'weapon') {
+export function applyUpgrade(card, stats, weapons) {
+  if (card.kind === 'weapon') {
     weapons[card.id] = Math.min(MAX_WEAPON_LEVEL, (weapons[card.id] || 0) + card.levels);
   } else {
     STAT_BY_ID[card.id].apply(stats, card.mult);

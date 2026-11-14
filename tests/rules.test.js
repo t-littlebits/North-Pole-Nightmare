@@ -4,6 +4,7 @@ import { validateRun, checkClaim, maxSpawns, computeScore, nextUnlock } from '..
 import { rollUpgrades, applyUpgrade } from '../src/data/upgrades.js';
 import { ADVENT_REWARDS } from '../src/data/advent.js';
 import { SKINS, CHARACTERS } from '../src/data/catalog.js';
+import { MODS } from '../src/data/mods.js';
 
 const good = { killPoints: 1200, kills: 150, bosses: 1, wave: 6, seconds: 170, presents: 6 };
 
@@ -41,6 +42,7 @@ test('advent data is complete and references real items', () => {
   for (const g of ADVENT_REWARDS.flatMap((r) => r.grants)) {
     if (g.type === 'skin') assert.ok(SKINS[g.id], g.id);
     if (g.type === 'character') assert.ok(CHARACTERS[g.id], g.id);
+    if (g.type === 'mod') assert.ok(MODS[g.id], g.id);
   }
 });
 test('upgrades: three distinct cards, applied correctly', () => {

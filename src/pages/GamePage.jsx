@@ -9,10 +9,11 @@ import { startMusic, stopMusic, sfx } from '../game/audio.js';
 import { CHARACTERS, CHARACTER_IDS, SKINS, WEAPONS, BOOSTS, RARITIES } from '../data/catalog.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
 import TitleTag from '../components/TitleTag.jsx';
-import { ARENAS, ARENA_IDS, arenaUnlocked } from '../data/arenas.js';
+import { ARENAS, ARENA_IDS, randomArena } from '../data/arenas.js';
+import { MODS } from '../data/mods.js';
 import { TITLE_BY_ID } from '../data/titles.js';
 
-const SWATCH = { village: '#e6f2fb', lake: '#b9e0f3', candy: '#fde9f1', workshop: '#4a3220' };
+const SWATCH = { village: '#e6f2fb', lake: '#b9e0f3', candy: '#fde9f1', workshop: '#8a5a2b' };
 
 export default function GamePage() {
   const app = useApp();
@@ -20,7 +21,6 @@ export default function GamePage() {
   const [phase, setPhase] = useState('menu');
   const [character, setCharacter] = useState('santa');
   const [skin, setSkin] = useState(null);
-  const [arena, setArena] = useState('village');
   const [cfg, setCfg] = useState(null);
   const [result, setResult] = useState(null);
   const [starting, setStarting] = useState(false);
@@ -30,7 +30,6 @@ export default function GamePage() {
     if (ready && !initialised.current && profile) {
       initialised.current = true;
       if (owns('character', profile.selected_character)) setCharacter(profile.selected_character);
-      try { const a = localStorage.getItem('npn.arena'); if (a && arenaUnlocked(a, profile.best_wave)) setArena(a); } catch { /* ignore */ }
     }
   }, [ready, profile, owns]);
   useEffect(() => () => stopMusic(), []);
@@ -42,14 +41,15 @@ export default function GamePage() {
   async function start() {
     setStarting(true);
     try {
-      let runId = null, used = null;
+      let runId = null, used = null, loadout = {};
+      const arena = randomArena();   // a different arena every run
       if (user) {
         backend.select({ character, skin: chosenSkin }).catch(() => {});
-        const r = await backend.startRun(character, arena);
-        runId = r.runId; used = r.boost;
+        const r = await backend.startRun(character);
+        runId = r.runId; used = r.boost; loadout = r.loadout || {};
         refresh();
       }
-      setCfg({ character, arena: user ? arena : 'village', skin: chosenSkin, boost: used, unlockedWeapons: Object.keys(WEAPONS).filter((w) => owns('weapon', w)), runId });
+      setCfg({ character, arena, loadout, skin: chosenSkin, boost: used, unlockedWeapons: Object.keys(WEAPONS).filter((w) => owns('weapon', w)), runId });
       setPhase('playing');
       startMusic();
     } catch (e) { showToast(e.message, 'err'); }
@@ -82,22 +82,10 @@ export default function GamePage() {
         })}
       </div>
 
-      <h2 className="section-title">Choose your arena</h2>
-      <div className="grid arenas">
-        {ARENA_IDS.map((id) => {
-          const a = ARENAS[id];
-          const open = arenaUnlocked(id, user ? profile?.best_wave : 0);
-          return (
-            <button key={id} className={`panel arena-card ${arena === id ? 'sel' : ''} ${open ? '' : 'locked'}`} style={{ borderTopColor: SWATCH[id] }}
-              aria-pressed={arena === id}
-              onClick={() => { if (!open) { showToast(user ? `Reach wave ${a.unlockWave} in any run to unlock ${a.name}.` : `Sign in and reach wave ${a.unlockWave} to unlock ${a.name}.`, 'info'); return; } setArena(id); try { localStorage.setItem('npn.arena', id); } catch { /* ignore */ } sfx('click'); }}>
-              <strong>{a.name}</strong>
-              <span className="small-text">{a.blurb}</span>
-              <span className="small-text gold">{a.mechanic}</span>
-              {!open && <span className="muted small-text">🔒 Reach wave {a.unlockWave} (your best: {user ? profile?.best_wave || 0 : 0})</span>}
-            </button>
-          );
-        })}
+      <div className="panel arenas-info">
+        <h2>Random arena</h2>
+        <p className="muted">Every run is fought in a randomly chosen arena. They look different but play exactly the same.</p>
+        <div className="chips">{ARENA_IDS.map((id) => <span key={id} className="chip"><i className="swatch" style={{ background: SWATCH[id] }} />{ARENAS[id].name}</span>)}</div>
       </div>
 
       <div className="panel">
@@ -117,6 +105,7 @@ export default function GamePage() {
         )}
       </div>
 
+      {user && <p className="muted center-text">Weapon mods equipped: <b>{Object.values(profile?.loadout || {}).reduce((a, l) => a + l.length, 0)}</b> · <Link to="/collection" className="link">edit loadout in Collection → Mods</Link></p>}
       <div className="row center">
         <button className="btn big" onClick={start} disabled={starting}>{starting ? 'Loading…' : 'Start run'}</button>
         {!user && <button className="btn ghost" onClick={() => setAuthOpen(true)}>Sign in to save scores</button>}
@@ -150,6 +139,7 @@ function Playing({ cfg, onOver, onQuit }) {
       bus.on('bossphase', () => { setBanner({ text: 'PHASE 2!', boss: true }); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => setBanner(null), 2200); }),
       bus.on('gameover', (r) => overRef.current(r))
     ];
+    if (ARENAS[cfg.arena]) { setBanner({ text: ARENAS[cfg.arena].name }); bannerTimer = setTimeout(() => setBanner(null), 2600); }
     const boot = () => { if (!dead && hostRef.current) game = createGame(hostRef.current, cfg); };
     (document.fonts?.load ? document.fonts.load('10px "Press Start 2P"') : Promise.resolve()).catch(() => {}).then(boot);
     const vis = () => { if (document.hidden) bus.emit('ui:pause'); };
@@ -194,7 +184,7 @@ function Playing({ cfg, onOver, onQuit }) {
             {boss && <div className="bossbar"><span>{boss.name}{boss.phase === 2 && <em className="phase2"> · ENRAGED</em>}</span><div className={`bar boss ${boss.phase === 2 ? 'enraged' : ''}`}><i style={{ width: `${(boss.hp / boss.max) * 100}%` }} /></div></div>}
             {banner && <div className={`banner ${banner.boss ? 'boss' : ''}`}>{banner.text || (banner.boss ? `BOSS WAVE ${banner.wave}` : `WAVE ${banner.wave}`)}</div>}
             <div className="hud-bottom">
-              <div className="weapons">{Object.entries(hud.weapons).map(([id, l]) => <span key={id} className="wslot" title={WEAPONS[id].name}><WeaponIcon id={id} px={3} /><em>{l}</em>{(hud.mods?.[id] || 0) > 0 && <b className="modpip">{'★'.repeat(hud.mods[id])}</b>}</span>)}{hud.rage && <span className="rage">RAGE</span>}</div>
+              <div className="weapons">{Object.entries(hud.weapons).map(([id, l]) => <span key={id} className="wslot" title={WEAPONS[id].name}><WeaponIcon id={id} px={3} /><em>{l}</em></span>)}{hud.rage && <span className="rage">RAGE</span>}</div>
               <button className={`special ${ready ? 'ready' : ''}`} onClick={() => bus.emit('ui:special')} disabled={!ready}>
                 <span>{sp.name}</span><small>{ready ? 'SPACE' : `${(sp.cd / 1000).toFixed(1)}s`}</small>
                 {!ready && <i style={{ width: `${100 - (sp.cd / sp.max) * 100}%` }} />}
@@ -207,8 +197,8 @@ function Playing({ cfg, onOver, onQuit }) {
             <h2>Level up! Choose a gift</h2>
             <div className="cards">
               {levelup.cards.map((c, i) => (
-                <button key={`${c.id}${i}`} className={`card r-${c.rarity} ${c.kind === 'mod' ? 'mod' : ''}`} onClick={() => bus.emit('ui:pick', i)}>
-                  <small>{c.kind === 'mod' ? `★ ${c.tag}` : RARITIES[c.rarity].name}</small>
+                <button key={`${c.id}${i}`} className={`card r-${c.rarity}`} onClick={() => bus.emit('ui:pick', i)}>
+                  <small>{RARITIES[c.rarity].name}</small>
                   <div className="card-icon">{c.iconWeapon ? <WeaponIcon id={c.iconWeapon} px={5} /> : <span>{c.icon}</span>}</div>
                   <strong>{c.name}</strong>
                   <p>{c.desc}</p>
@@ -272,6 +262,7 @@ function Over({ result, cfg, onAgain }) {
           <>
             <p>Personal best before this run: <b>{(sub.prevBest || 0).toLocaleString()}</b>{sub.rank ? <> · All-time rank <b>#{sub.rank}</b></> : null}</p>
             <p className="gold">+{sub.coins} coins earned 🪙</p>
+            {[...(sub.newMods || []), ...(sub.presentMods || [])].length > 0 && <p>🎁 Weapon mod unlocked: {[...(sub.newMods || []), ...(sub.presentMods || [])].map((id) => <span key={id} className="chip on">{MODS[id].icon} {MODS[id].name}</span>)}</p>}
             {sub.newTitles?.length > 0 && <p>New title{sub.newTitles.length > 1 ? 's' : ''} unlocked: {sub.newTitles.map((id) => <TitleTag key={id} id={id} />)}</p>}
           </>
         )}

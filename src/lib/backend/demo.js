@@ -4,8 +4,8 @@ import { CHARACTERS, SKINS, WEAPONS, BOOSTS, DEFAULT_WEAPONS, CHARACTER_IDS, def
 import { validateRun, checkClaim, adventYear } from '../../shared/rules.js';
 import { USERNAME_RE } from '../../shared/rules.js';
 import { clock } from '../clock.js';
-import { arenaUnlocked } from '../../data/arenas.js';
-import { evaluateTitles } from '../../data/titles.js';
+import { evaluateTitles, TITLE_BY_ID } from '../../data/titles.js';
+import { MOD_CRATE_PRICE, MAX_SLOTS, canEquip, sanitizeLoadout, rollModDrop, rollPresentMods } from '../../data/mods.js';
 
 const KEY = 'npn.demo.v1';
 const authSubs = new Set();
@@ -30,7 +30,7 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catc
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
 const me = () => {
   const u = db.session ? db.users[db.session] : null;
-  if (u) { u.titles ||= []; if (u.profile.equipped_title === undefined) u.profile.equipped_title = null; }
+  if (u) { u.titles ||= []; if (u.profile.equipped_title === undefined) u.profile.equipped_title = null; u.profile.loadout ||= {}; }
   return u;
 };
 
@@ -44,8 +44,15 @@ function awardTitles(u) {
   const fresh = evaluateTitles(stats).filter((id) => !u.titles.includes(id));
   u.titles.push(...fresh);
   if (fresh.length && !u.profile.equipped_title) u.profile.equipped_title = fresh[0];
-  return fresh;
+  // every earned title also unlocks its mod (this backfills older accounts too)
+  const mods = [];
+  for (const id of u.titles) {
+    const m = TITLE_BY_ID[id]?.mod;
+    if (m && !owns(u, 'mod', m)) { give(u, 'mod', m); mods.push(m); }
+  }
+  return { titles: fresh, mods };
 }
+const ownedModSet = (u) => new Set(u.inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id));
 const notifyAuth = () => authSubs.forEach((f) => f());
 const notifyLb = () => lbSubs.forEach((f) => f());
 
@@ -61,7 +68,7 @@ function newUser(username) {
     profile: {
       id, username, coins: 0, selected_character: 'santa', equipped: {}, boosts: {}, active_boost: null,
       games_played: 0, total_kills: 0, total_score: 0, best_score: 0, best_wave: 0, total_seconds: 0,
-      bosses_defeated: 0, presents_opened: 0, equipped_title: null, created_at: new Date().toISOString()
+      bosses_defeated: 0, presents_opened: 0, equipped_title: null, loadout: {}, created_at: new Date().toISOString()
     }
   };
 }
@@ -110,9 +117,8 @@ export const demo = {
     return { user: { id: u.id, username: u.username }, profile: { ...u.profile }, inventory: [...u.inventory], claims: u.claims.filter((c) => c.year === year), titles: [...u.titles] };
   },
 
-  async startRun(character, arena = 'village') {
+  async startRun(character) {
     const u = me() || fail('Sign in first');
-    if (!arenaUnlocked(arena, u.profile.best_wave)) fail('That arena is still locked');
     if (!CHARACTERS[character] || !owns(u, 'character', character)) fail('Character not unlocked');
     let boost = null;
     const b = u.profile.active_boost;
@@ -121,7 +127,8 @@ export const demo = {
     const runId = uid();
     u.runs[runId] = { character, boost, startedAt: Date.now(), submitted: false };
     save();
-    return { runId, boost };
+    const weapons = new Set(u.inventory.filter((i) => i.item_type === 'weapon').map((i) => i.item_id));
+    return { runId, boost, loadout: sanitizeLoadout(u.profile.loadout, ownedModSet(u), weapons) };
   },
 
   async submitRun(runId, stats) {
@@ -137,10 +144,12 @@ export const demo = {
     p.coins += r.coins; p.games_played += 1; p.total_kills += r.kills; p.total_score += r.score;
     p.best_score = Math.max(p.best_score, r.score); p.best_wave = Math.max(p.best_wave, r.wave);
     p.total_seconds += r.seconds; p.bosses_defeated += r.bosses; p.presents_opened += r.presents;
-    const newTitles = awardTitles(u);
+    const t = awardTitles(u);
+    const presentMods = rollPresentMods(r.presents, ownedModSet(u));
+    presentMods.forEach((id) => give(u, 'mod', id));
     save(); notifyLb();
     const rank = leaderboardRows().findIndex((x) => x.user_id === u.id) + 1;
-    return { score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: r.score > prev, prevBest: prev, rank, newTitles };
+    return { score: r.score, coins: r.coins, wave: r.wave, kills: r.kills, isBest: r.score > prev, prevBest: prev, rank, newTitles: t.titles, newMods: t.mods, presentMods };
   },
 
   async getLeaderboard(limit = 50) { return leaderboardRows().slice(0, limit); },
@@ -158,9 +167,9 @@ export const demo = {
       else if (g.type === 'boost') u.profile.boosts[g.id] = (u.profile.boosts[g.id] || 0) + (g.amount || 1);
       else give(u, g.type, g.id);
     }
-    const newTitles = awardTitles(u);
+    const t = awardTitles(u);
     save();
-    return { reward: c.reward, newTitles };
+    return { reward: c.reward, newTitles: t.titles, newMods: t.mods };
   },
 
   async buy(type, id) {
@@ -194,6 +203,38 @@ export const demo = {
     if (id && !(BOOSTS[id] && (u.profile.boosts[id] || 0) > 0)) fail('You have none of this boost');
     u.profile.active_boost = id || null;
     save();
+  },
+
+  async equipLoadout(weapon, mods) {
+    const u = me() || fail('Sign in first');
+    if (!owns(u, 'weapon', weapon)) fail('You have not unlocked that weapon');
+    const list = Array.isArray(mods) ? mods : [];
+    if (list.length > MAX_SLOTS || new Set(list).size !== list.length) fail(`A weapon has ${MAX_SLOTS} mod slots`);
+    for (const id of list) { if (!canEquip(id, weapon)) fail('That mod does not fit this weapon'); if (!owns(u, 'mod', id)) fail('You have not unlocked that mod'); }
+    if (list.length) u.profile.loadout[weapon] = list; else delete u.profile.loadout[weapon];
+    save();
+  },
+
+  async buyModCrate() {
+    const u = me() || fail('Sign in first');
+    if (u.profile.coins < MOD_CRATE_PRICE) fail('Not enough coins');
+    const id = rollModDrop(ownedModSet(u));
+    if (!id) fail('You already own every mod');
+    u.profile.coins -= MOD_CRATE_PRICE;
+    give(u, 'mod', id);
+    save();
+    return { mod: id };
+  },
+
+  async sendFeedback({ kind, message }) {
+    const text = String(message || '').trim();
+    if (text.length < 5) fail('Please write a little more (at least 5 characters)');
+    if (text.length > 1000) fail('Please keep it under 1000 characters');
+    let all = [];
+    try { all = JSON.parse(localStorage.getItem('npn.demo.feedback') || '[]'); } catch { /* fresh */ }
+    all.push({ kind: kind || 'other', message: text, at: new Date().toISOString(), username: me()?.username || null });
+    try { localStorage.setItem('npn.demo.feedback', JSON.stringify(all.slice(-50))); } catch { /* ignore */ }
+    return { ok: true };
   },
 
   async equipTitle(id) {

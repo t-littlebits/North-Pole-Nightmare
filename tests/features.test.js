@@ -14,13 +14,16 @@ globalThis.window = globalThis;
 
 const { default: GameScene } = await import('../src/game/scenes/GameScene.js');
 const { bus } = await import('../src/game/bus.js');
-const { ARENAS, ARENA_IDS, arenaUnlocked } = await import('../src/data/arenas.js');
-const { MODS, availableMods } = await import('../src/data/mods.js');
+const { ARENAS, ARENA_IDS, randomArena } = await import('../src/data/arenas.js');
+const modsData = await import('../src/data/mods.js');
+const { MODS, MOD_LIST, MAX_SLOTS, canEquip, sanitizeLoadout, rollPresentMods, rollModDrop, MOD_CRATE_PRICE } = modsData;
+const { ADVENT_REWARDS } = await import('../src/data/advent.js');
 const { BOSSES, CHARACTERS } = await import('../src/data/catalog.js');
 const { rollUpgrades, applyUpgrade } = await import('../src/data/upgrades.js');
 const { TITLES, evaluateTitles, TITLE_BY_ID } = await import('../src/data/titles.js');
 const { validateRun } = await import('../src/shared/rules.js');
 const { demo } = await import('../src/lib/backend/demo.js');
+const { clock } = await import('../src/lib/clock.js');
 
 const ALL_WEAPONS = ['snowball', 'candycane', 'iceblast', 'bells', 'bomb'];
 
@@ -45,31 +48,30 @@ function drive(s, seconds, { pull = true } = {}) {
 }
 
 for (const id of ARENA_IDS) {
-  test(`arena ${id} runs and keeps its rules`, () => {
+  test(`arena ${id} is purely cosmetic and runs`, () => {
     const s = make('santa', { arena: id });
     assert.equal(s.arena.id, id);
     drive(s, 70);
     assert.ok(s.run.wave >= 2 && s.run.kills > 0);
-    if (id === 'candy') assert.ok(s.zones.length > 5, 'sticky puddles exist');
-    if (id === 'workshop') assert.ok(s.dark, 'darkness overlay');
-    if (id === 'lake') assert.equal(s.arena.ice, true);
+    // no gimmicks: nothing arena-specific changes the rules
+    for (const k of ['ice', 'sticky', 'bias', 'ghostFrom', 'xpBonus', 'dark', 'unlockWave']) assert.equal(ARENAS[id][k], undefined, k);
   });
 }
 
-test('arena unlocking by best wave', () => {
-  assert.ok(arenaUnlocked('village', 0));
-  assert.ok(!arenaUnlocked('lake', 4));
-  assert.ok(arenaUnlocked('lake', 5));
-  assert.ok(!arenaUnlocked('workshop', 11) && arenaUnlocked('workshop', 12));
-  assert.ok(!arenaUnlocked('nope', 99));
+test('arena choice is random and always valid', () => {
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) seen.add(randomArena());
+  assert.equal(seen.size, ARENA_IDS.length);
+  assert.equal(randomArena(() => 0), ARENA_IDS[0]);
+  assert.equal(randomArena(() => 0.999999), ARENA_IDS[ARENA_IDS.length - 1]);
 });
 
-test('workshop spawns ghosts from wave 1 and lake favours snowmen', () => {
-  const w = make('santa', { arena: 'workshop' });
-  const seen = new Set(); for (let i = 0; i < 400; i++) seen.add(w.pickType());
-  assert.ok(seen.has('ghost'));
-  const village = make('santa'); const v = new Set(); for (let i = 0; i < 400; i++) v.add(village.pickType());
-  assert.ok(!v.has('ghost'));
+test('enemy mix is identical in every arena', () => {
+  for (const id of ARENA_IDS) {
+    const s = make('santa', { arena: id });
+    const seen = new Set(); for (let i = 0; i < 400; i++) seen.add(s.pickType());
+    assert.ok(!seen.has('ghost'), `${id}: no ghosts before wave 7`);
+  }
 });
 
 for (const ch of ['snowman', 'reindeer', 'knight']) {
@@ -89,37 +91,129 @@ for (const ch of ['snowman', 'reindeer', 'knight']) {
   });
 }
 
-// ---------------- weapon mods ----------------
-test('mods: offered at level 3 and 6, chosen mods are removed from the pool', () => {
-  assert.equal(availableMods('snowball', 2, []).length, 0);
-  assert.equal(availableMods('snowball', 3, []).length, 3);
-  assert.equal(availableMods('snowball', 5, ['heavy']).length, 0);
-  assert.equal(availableMods('snowball', 6, ['heavy']).length, 2);
-  assert.equal(availableMods('snowball', 8, ['heavy', 'split']).length, 0);
-  const ctx = { wave: 5, luck: 0, weapons: { snowball: 3 }, mods: {}, available: ['snowball', 'candycane'] };
-  let sawMod = false;
-  for (let i = 0; i < 300; i++) {
-    const cards = rollUpgrades(ctx);
-    assert.equal(new Set(cards.map((c) => c.kind + c.id)).size, cards.length);
-    if (cards.some((c) => c.kind === 'mod')) { sawMod = true; const c = cards.find((x) => x.kind === 'mod'); assert.equal(c.weapon, 'snowball'); assert.equal(c.rarity, 'epic'); }
+// ---------------- weapon mods (equippable collection) ----------------
+const compatible = (modId) => ['snowball', 'candycane', 'iceblast', 'bells', 'bomb'].filter((w) => canEquip(modId, w));
+
+test('mod catalogue: every mod fits something, has a source, and none boost stats', () => {
+  assert.equal(MOD_LIST.length, 15);
+  const titleMods = new Set(TITLES.map((t) => t.mod).filter(Boolean));
+  const adventMods = new Set(ADVENT_REWARDS.flatMap((r) => r.grants).filter((g) => g.type === 'mod').map((g) => g.id));
+  for (const m of MOD_LIST) {
+    assert.ok(compatible(m.id).length > 0, `${m.id} fits a weapon`);
+    assert.ok(titleMods.has(m.id) || adventMods.has(m.id), `${m.id} can be earned deterministically`);
+    assert.ok(!/\bdamage\b|attack speed|\bXP\b/i.test(m.desc.replace(/\(no damage\)/i, '')), `${m.id} must not promise stat boosts`);
   }
-  assert.ok(sawMod);
-  const mods = {};
-  applyUpgrade({ kind: 'mod', weapon: 'snowball', modId: 'split' }, {}, {}, mods);
-  assert.deepEqual(mods, { snowball: ['split'] });
+  for (const id of titleMods) assert.ok(MODS[id], id);
+  assert.ok(!canEquip('echo', 'bells'));
+  assert.ok(canEquip('gust', 'bells') && canEquip('gust', 'bomb'));
+  assert.ok(!canEquip('ricochet', 'bomb'));
 });
 
-for (const [w, list] of Object.entries(MODS)) {
-  for (const m of list) {
-    test(`mod ${w}:${m.id} runs in-game`, () => {
-      const s = make('santa');
-      s.weapons = { [w]: 6 };
-      s.mods = { [w]: [m.id] };
-      drive(s, 25);
-      assert.ok(s.run.kills > 0, 'weapon killed things');
+test('loadout sanitising: slots, ownership, compatibility, duplicates', () => {
+  const owned = new Set(['gust', 'frost', 'snare', 'stun', 'echo', 'ricochet']);
+  const out = sanitizeLoadout({ snowball: ['gust', 'gust', 'frost', 'snare', 'stun'], bells: ['echo', 'gust'], bomb: ['ricochet', 'hack'], nonsense: ['gust'] }, owned);
+  assert.deepEqual(out.snowball, ['gust', 'frost', 'snare']);   // no duplicate, max 3
+  assert.deepEqual(out.bells, ['gust']);                         // echo does not fit bells
+  assert.equal(out.bomb, undefined);                             // ricochet does not fit bombs; unknown ids dropped
+  assert.equal(out.nonsense, undefined);
+  assert.deepEqual(sanitizeLoadout({ snowball: ['seeker'] }, new Set()), {});   // not owned -> nothing
+  assert.deepEqual(sanitizeLoadout(null), {});
+  assert.deepEqual(sanitizeLoadout({ snowball: ['gust'] }, owned, new Set(['bomb'])), {}); // weapon not owned
+});
+
+test('present mod drops: tiny chance, never a duplicate, capped by what is left', () => {
+  assert.deepEqual(rollPresentMods(10, new Set(), () => 0.5), []);              // 50% roll > 2% rate: nothing
+  const got = rollPresentMods(5, new Set(), () => 0);                          // every roll succeeds
+  assert.equal(got.length, 5); assert.equal(new Set(got).size, 5);
+  const almost = new Set(MOD_LIST.map((m) => m.id)); almost.delete('echo');
+  assert.deepEqual(rollPresentMods(10, almost, () => 0), ['echo']);            // only one left to find
+  assert.deepEqual(rollPresentMods(10, new Set(MOD_LIST.map((m) => m.id)), () => 0), []);
+  let hits = 0; for (let i = 0; i < 20000; i++) if (rollPresentMods(1, new Set()).length) hits++;
+  assert.ok(hits > 200 && hits < 700, `about 2% of presents drop a mod (got ${hits}/20000)`);
+  assert.equal(rollModDrop(new Set(MOD_LIST.map((m) => m.id))), null);
+});
+
+test('mods in the run: loadout comes from the config and is sanitised', () => {
+  const s = make('santa', { loadout: { snowball: ['gust', 'echo', 'frost', 'stun'], bells: ['echo'] } });
+  assert.deepEqual(s.mods.snowball, ['gust', 'echo', 'frost']);
+  assert.equal(s.mods.bells, undefined);
+});
+
+for (const m of MOD_LIST) {
+  for (const w of compatible(m.id)) {
+    test(`mod ${m.id} on ${w} runs in-game`, () => {
+      const s = make('santa', { loadout: { [w]: [m.id] } });
+      s.weapons = { [w]: 4 };
+      drive(s, 20);
+      assert.ok(s.run.kills > 0, 'weapon still kills things');
     });
   }
 }
+
+test('three mods can be stacked on one weapon without breaking it', () => {
+  const s = make('santa', { loadout: { snowball: ['seeker', 'ricochet', 'echo'], iceblast: ['deepfreeze', 'lingering', 'gust'] } });
+  s.weapons = { snowball: 5, iceblast: 5 };
+  drive(s, 30);
+  assert.ok(s.run.kills > 0);
+});
+
+test('echo: every 5th attack is repeated once', () => {
+  const s = make('santa', { loadout: { snowball: ['echo'] } });
+  s.weapons = { snowball: 1 };
+  let calls = 0;
+  s.fire_snowball = () => { calls += 1; return true; };
+  drive(s, 40, { pull: false });
+  const attacks = s.atkCount.snowball;
+  assert.ok(attacks >= 20, `plenty of attacks (${attacks})`);
+  const echoes = Math.floor(attacks / 5);
+  assert.ok(calls === attacks + echoes || calls === attacks + echoes - 1, `calls ${calls} = attacks ${attacks} + echoes ${echoes}`);
+  const plain = make('santa');
+  plain.weapons = { snowball: 1 }; let c2 = 0; plain.fire_snowball = () => { c2 += 1; return true; };
+  drive(plain, 40, { pull: false });
+  assert.equal(c2, plain.atkCount.snowball, 'without echo there are no extra attacks');
+});
+
+test('proc mods: knockback, slow, stun and snare behave as described', () => {
+  const real = Math.random;
+  try {
+    Math.random = () => 0; // every chance succeeds
+    const s = make('santa', { loadout: { snowball: ['gust', 'frost', 'stun'], bells: ['snare'] } });
+    const e = s.spawnEnemy('snowman', s.player.x + 100, s.player.y);
+    s.weaponProc('snowball', e);
+    assert.ok(e.kUntil > s.runMs, 'gust knocks back');
+    assert.ok(e.slowUntil > s.runMs, 'frost slows');
+    assert.ok(e.frozenUntil > s.runMs, 'stun stops a normal enemy');
+    const snared = s.spawnEnemy('snowman', s.player.x + 100, s.player.y);
+    s.weaponProc('bells', snared);
+    assert.ok(snared.snareUntil > s.runMs, 'snare slows to a crawl');
+    const boss = s.spawnEnemy('snowman', s.player.x + 100, s.player.y); boss.boss = true;
+    s.weaponProc('snowball', boss);
+    assert.ok(!boss.frozenUntil, 'bosses ignore stun');
+    const bossSnare = s.spawnEnemy('snowman', s.player.x + 100, s.player.y); bossSnare.boss = true;
+    s.weaponProc('bells', bossSnare);
+    assert.ok(!bossSnare.snareUntil, 'bosses ignore snare');
+    const other = s.spawnEnemy('snowman', s.player.x + 100, s.player.y);
+    s.weaponProc('bomb', other);   // the bomb has no mods equipped
+    assert.ok(!other.kUntil && !other.slowUntil, 'mods only affect the weapon they are equipped on');
+    Math.random = () => 0.99;      // every chance fails
+    const calm = s.spawnEnemy('snowman', s.player.x + 100, s.player.y);
+    s.weaponProc('snowball', calm);
+    assert.ok(!calm.kUntil && !calm.frozenUntil && !calm.snareUntil);
+  } finally { Math.random = real; }
+});
+
+test('mods never change weapon damage numbers', () => {
+  const plain = make('santa'); const modded = make('santa', { loadout: { snowball: ['gust', 'frost', 'seeker'], bomb: ['gravity', 'glaze'] } });
+  const hp = [];
+  for (const s of [plain, modded]) {
+    s.stats.crit = 0;
+    const e = s.spawnEnemy('snowman', s.player.x + 200, s.player.y);
+    const bullet = s.spawnSnowball(s.player.x, s.player.y, 0, 8, {});
+    s.lastCrit = false; s.onBulletHit(bullet, e);
+    hp.push(e.maxHp - e.hp);
+  }
+  assert.equal(hp[0], hp[1]);
+});
 
 // ---------------- bosses ----------------
 for (let i = 0; i < BOSSES.length; i++) {
@@ -179,8 +273,7 @@ test('demo backend: titles awarded, equipped, owner title (demo)', async () => {
   await demo.signUp({ username: 'TitleTester' });
   let me = await demo.getMe();
   assert.deepEqual(me.titles, []);
-  await assert.rejects(() => demo.startRun('santa', 'lake'), /locked/);
-  const { runId } = await demo.startRun('santa', 'village');
+  const { runId } = await demo.startRun('santa');
   const r = await demo.submitRun(runId, { killPoints: 0, kills: 0, bosses: 0, wave: 1, seconds: 0, presents: 0 });
   assert.deepEqual(r.newTitles, ['fresh_snowflake']);
   me = await demo.getMe();
@@ -194,5 +287,70 @@ test('demo backend: titles awarded, equipped, owner title (demo)', async () => {
   assert.ok(me.titles.includes('owner'));
   await demo.equipTitle(null);
   assert.equal((await demo.getMe()).profile.equipped_title, null);
+  await demo.resetAll();
+});
+
+test('demo backend: present drops, equipping and run-start loadout', async () => {
+  await demo.resetAll();
+  await demo.signUp({ username: 'ModTester' });
+  let me = await demo.getMe();
+  assert.equal(me.inventory.filter((i) => i.item_type === 'mod').length, 0);
+  await assert.rejects(() => demo.equipLoadout('snowball', ['gust']), /not unlocked/);
+  let { runId, loadout } = await demo.startRun('santa');
+  assert.deepEqual(loadout, {});
+  // two presents, every roll succeeds -> the "server" drops two mods (deterministic: first two by catalogue order)
+  const real = Math.random; Math.random = () => 0;
+  let r;
+  try { r = await demo.submitRun(runId, { killPoints: 0, kills: 0, bosses: 0, wave: 1, seconds: 0, presents: 2 }); } finally { Math.random = real; }
+  assert.deepEqual(r.presentMods, ['gust', 'frost']);
+  me = await demo.getMe();
+  const owned = me.inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id);
+  assert.deepEqual(owned.sort(), ['frost', 'gust']);
+  await assert.rejects(() => demo.equipLoadout('snowball', ['gust', 'gust']), /slots/);
+  await assert.rejects(() => demo.equipLoadout('snowball', ['gust', 'frost', 'snare', 'stun']), /slots/);
+  await assert.rejects(() => demo.equipLoadout('snowball', ['seeker']), /not unlocked/);   // not owned
+  await assert.rejects(() => demo.equipLoadout('bells', ['gust']), /weapon/);              // bells not unlocked yet
+  await demo.equipLoadout('snowball', ['gust', 'frost']);
+  ({ runId, loadout } = await demo.startRun('santa'));
+  assert.deepEqual(loadout, { snowball: ['gust', 'frost'] });
+  await demo.equipLoadout('snowball', []);
+  assert.deepEqual((await demo.startRun('santa')).loadout, {});
+});
+
+test('demo backend: advent mods, Mod Crate, title-reward mods', async () => {
+  await demo.resetAll();
+  await demo.signUp({ username: 'CrateTester' });
+  await assert.rejects(() => demo.buyModCrate(), /Not enough coins/);
+  clock.set('2026-12-12T09:00:00Z');
+  for (let d = 1; d <= 12; d++) await demo.claimDay(d);     // doors 4 and 9 hold mods; bells weapon is door 5
+  let me = await demo.getMe();
+  const modsOf = () => me.inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id);
+  assert.deepEqual(modsOf().sort(), ['glaze', 'hook']);
+  assert.equal(me.profile.coins, 750);
+  await demo.equipLoadout('bells', []);                      // bells unlocked from the calendar
+  await assert.rejects(() => demo.equipLoadout('candycane', ['hook', 'glaze']), /fit/);   // glaze is a bomb mod
+  await demo.equipLoadout('candycane', ['hook']);
+  const crate = await demo.buyModCrate();
+  me = await demo.getMe();
+  assert.ok(MODS[crate.mod]); assert.ok(!['glaze', 'hook'].includes(crate.mod));
+  assert.equal(me.profile.coins, 750 - MOD_CRATE_PRICE);
+  assert.equal(modsOf().length, 3);
+  clock.set(null);
+  // 10 finished runs earn the Regular Reveller title, which unlocks the Wind Gust mod
+  let newMods = [];
+  for (let i = 0; i < 10; i++) {
+    const { runId } = await demo.startRun('santa');
+    const res = await demo.submitRun(runId, { killPoints: 0, kills: 0, bosses: 0, wave: 1, seconds: 0, presents: 0 });
+    newMods = newMods.concat(res.newMods);
+  }
+  me = await demo.getMe();
+  assert.ok(me.titles.includes('regular_reveller'));
+  assert.ok(modsOf().includes('gust'));
+  assert.ok(newMods.includes('gust') || crate.mod === 'gust');
+  // feedback
+  await assert.rejects(() => demo.sendFeedback({ kind: 'bug', message: 'hi' }), /little more/);
+  await assert.rejects(() => demo.sendFeedback({ kind: 'bug', message: 'x'.repeat(1001) }), /1000/);
+  assert.deepEqual(await demo.sendFeedback({ kind: 'suggestion', message: 'Add more snow please' }), { ok: true });
+  assert.equal(JSON.parse(store.get('npn.demo.feedback')).at(-1).kind, 'suggestion');
   await demo.resetAll();
 });

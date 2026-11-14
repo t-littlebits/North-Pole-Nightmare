@@ -157,13 +157,13 @@ label { display: block; margin: 10px 0; } .search { font-size: 26px; margin-bott
 .progress { position: relative; width: 100%; height: 22px; background: var(--night); box-shadow: 0 0 0 3px var(--ink); } .progress i { display: block; height: 100%; background: var(--pine-l); } .progress span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 16px; text-shadow: 1px 1px 0 var(--ink); }
 .section-title { margin-top: 26px; }
 
-/* arenas */
-.grid.arenas { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-bottom: 22px; }
-.arena-card { display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--snow); font: inherit; border: 0; border-top: 10px solid; cursor: pointer; }
-.arena-card strong { font-family: var(--font-px); font-weight: 400; font-size: 11px; line-height: 1.5; }
-.arena-card.sel { background: var(--panel2); outline: 4px solid var(--gold); outline-offset: 2px; }
-
-/* mods + boss phase */
-.card.mod { background: #2a1d5c; } .card.mod::after { content: 'MOD'; position: absolute; top: 6px; right: 8px; font-family: var(--font-px); font-size: 8px; color: var(--gold); }
-.modpip { position: absolute; left: 0; top: -9px; width: 100%; text-align: center; font-size: 11px; color: #ffd166; line-height: 1; }
+/* boss phase */
 .phase2 { color: var(--danger); font-style: normal; } .bar.boss.enraged i { background: var(--candy); animation: blink .6s steps(2) infinite; }
+
+/* mod loadout, random arena, feedback */
+.slots { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.slot { min-width: 160px; padding: 10px 12px; background: var(--night); color: var(--muted); border: 3px dashed var(--muted); font: inherit; text-align: center; }
+.slot.filled { background: var(--pine); color: var(--snow); border: 3px solid var(--gold); cursor: pointer; } .slot.filled:hover { filter: brightness(1.15); }
+.chip:disabled { opacity: .5; cursor: not-allowed; }
+.swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; box-shadow: 0 0 0 2px var(--ink); vertical-align: middle; }
+textarea { font: inherit; background: var(--night); color: var(--snow); border: 3px solid var(--muted); padding: 8px 10px; width: 100%; resize: vertical; } textarea:focus { border-color: var(--gold); outline: 0; }

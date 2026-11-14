@@ -18,6 +18,7 @@ create table if not exists public.profiles (
   boosts jsonb not null default '{}'::jsonb,        -- {"xp_boost": 2, ...}
   active_boost text,
   equipped_title text,
+  loadout jsonb not null default '{}'::jsonb,       -- equipped weapon mods: {"snowball": ["echo","gust"], ...}
   settings jsonb not null default '{}'::jsonb,
   games_played int not null default 0,
   total_kills int not null default 0,
@@ -34,7 +35,7 @@ create unique index if not exists profiles_username_lower on public.profiles (lo
 
 create table if not exists public.inventory (
   user_id uuid not null references public.profiles(id) on delete cascade,
-  item_type text not null check (item_type in ('character','skin','weapon')),
+  item_type text not null check (item_type in ('character','skin','weapon','mod')),
   item_id text not null,
   source text not null default 'default',
   acquired_at timestamptz not null default now(),
@@ -93,6 +94,17 @@ create table if not exists public.user_titles (
   primary key (user_id, title_id)
 );
 
+create table if not exists public.feedback (   -- player feedback / suggestions (read it in the Table Editor)
+  id bigint generated always as identity primary key,
+  user_id uuid references public.profiles(id) on delete set null,
+  username text,
+  kind text not null check (kind in ('bug','suggestion','other')),
+  message text not null check (char_length(message) between 5 and 1000),
+  page text,
+  created_at timestamptz not null default now()
+);
+create index if not exists feedback_user_idx on public.feedback (user_id, created_at desc);
+
 -- ---------- Row level security ----------
 alter table public.profiles enable row level security;
 alter table public.inventory enable row level security;
@@ -101,6 +113,7 @@ alter table public.scores enable row level security;
 alter table public.leaderboard enable row level security;
 alter table public.advent_claims enable row level security;
 alter table public.user_titles enable row level security;
+alter table public.feedback enable row level security;   -- no policies: only the server can read or write it
 
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles for select using (auth.uid() = id);
@@ -128,6 +141,7 @@ create policy "public leaderboard" on public.leaderboard for select using (true)
 revoke insert, update, delete on public.profiles from anon, authenticated;
 grant update (settings) on public.profiles to authenticated;
 revoke insert, update, delete on public.inventory, public.runs, public.scores, public.leaderboard, public.advent_claims, public.user_titles from anon, authenticated;
+revoke all on public.feedback from anon, authenticated;
 
 -- Public, non-sensitive view for profile pages and username search (hides coins, boosts, settings).
 -- (Supabase may flag this as a "security definer view"; that is intentional here.)
@@ -221,7 +235,7 @@ begin
     t := g->>'type';
     if t = 'coins' then
       update profiles set coins = coins + (g->>'amount')::int where id = p_user;
-    elsif t in ('skin', 'weapon', 'character') then
+    elsif t in ('skin', 'weapon', 'character', 'mod') then
       insert into inventory (user_id, item_type, item_id, source) values (p_user, t, g->>'id', 'advent') on conflict do nothing;
     elsif t = 'boost' then
       update profiles set boosts = jsonb_set(boosts, array[g->>'id'],

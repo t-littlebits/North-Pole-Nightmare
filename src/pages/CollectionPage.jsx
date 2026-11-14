@@ -7,13 +7,14 @@ import { ADVENT_REWARDS } from '../data/advent.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
 import { TITLES, titleProgress } from '../data/titles.js';
 import TitleTag from '../components/TitleTag.jsx';
+import { MODS, MOD_LIST, MAX_SLOTS, MOD_CRATE_PRICE, PRESENT_MOD_RATE, canEquip, modFits } from '../data/mods.js';
 
 const adventDay = {};
 ADVENT_REWARDS.forEach((r) => r.grants.forEach((g) => { adventDay[`${g.type}:${g.id}`] = r.day; }));
-const TABS = ['Heroes', 'Skins', 'Weapons', 'Boosts', 'Titles'];
+const TABS = ['Heroes', 'Skins', 'Weapons', 'Mods', 'Boosts', 'Titles'];
 
 export default function CollectionPage() {
-  const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims } = useApp();
+  const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims, inventory, showToast } = useApp();
   const [tab, setTab] = useState('Heroes');
   const needAuth = () => { if (!user) { setAuthOpen(true); return true; } return false; };
   const buy = (type, id, name) => { if (!needAuth()) act(() => backend.buy(type, id), `Unlocked ${name}!`); };
@@ -22,6 +23,20 @@ export default function CollectionPage() {
   const total = CHARACTER_IDS.length + Object.keys(SKINS).length + Object.keys(WEAPONS).length;
   const have = CHARACTER_IDS.filter((c) => owns('character', c)).length + Object.keys(SKINS).filter((s) => owns('skin', s)).length + Object.keys(WEAPONS).filter((w) => owns('weapon', w)).length;
   const boosts = Object.entries(profile?.boosts || {}).filter(([, n]) => n > 0);
+  const ownedMods = new Set(inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id));
+  const loadout = profile?.loadout || {};
+  const setSlots = (weapon, list, msg) => { if (!needAuth()) act(() => backend.equipLoadout(weapon, list), msg); };
+  const openCrate = async () => {
+    if (needAuth()) return;
+    const r = await act(() => backend.buyModCrate());
+    if (r?.mod) showToast(`Crate opened: ${MODS[r.mod].icon} ${MODS[r.mod].name}!`, 'ok');
+  };
+  const modSource = (id) => {
+    const t = TITLES.find((x) => x.mod === id);
+    if (t) return `Earn the title "${t.name}"`;
+    const d = ADVENT_REWARDS.find((r) => r.grants.some((g) => g.type === 'mod' && g.id === id));
+    return d ? `Advent calendar, day ${d.day}` : 'Presents or Mod Crates';
+  };
   const stats = {
     ...(profile || {}), advent_claims: claims.length,
     heroes_owned: CHARACTER_IDS.filter((c) => owns('character', c)).length, skins_owned: Object.keys(SKINS).filter((s) => owns('skin', s)).length
@@ -92,6 +107,53 @@ export default function CollectionPage() {
         </div>
       )}
 
+      {tab === 'Mods' && (
+        <>
+          <p className="muted">Each weapon has {MAX_SLOTS} mod slots. Mods change how a weapon behaves (knockbacks, slows, bounces, echoes...) but never add damage, attack speed or XP. Earn them from titles and the advent calendar, find them in mystery presents (about {Math.round(PRESENT_MOD_RATE * 100)}% each, revealed after your run), or open a crate.</p>
+          <div className="panel row">
+            <button className="btn" onClick={openCrate}>Open a Mod Crate · 🪙 {MOD_CRATE_PRICE}</button>
+            <span className="muted">A random mod you do not own yet.</span>
+          </div>
+          {Object.values(WEAPONS).filter((w) => owns('weapon', w.id)).map((w) => {
+            const eq = loadout[w.id] || [];
+            const avail = MOD_LIST.filter((m) => ownedMods.has(m.id) && canEquip(m.id, w.id) && !eq.includes(m.id));
+            return (
+              <div className="panel" key={w.id}>
+                <div className="row"><WeaponIcon id={w.id} px={4} /><strong>{w.name}</strong></div>
+                <div className="slots">
+                  {Array.from({ length: MAX_SLOTS }, (_, i) => {
+                    const id = eq[i];
+                    return id
+                      ? <button key={i} className="slot filled" title="Click to remove" onClick={() => setSlots(w.id, eq.filter((x) => x !== id), `${MODS[id].name} removed`)}>{MODS[id].icon} {MODS[id].name} ✕</button>
+                      : <span key={i} className="slot">Empty slot</span>;
+                  })}
+                </div>
+                <div className="chips">
+                  {avail.map((m) => <button key={m.id} className="chip" disabled={eq.length >= MAX_SLOTS} title={m.desc} onClick={() => setSlots(w.id, [...eq, m.id], `${m.name} equipped`)}>{m.icon} {m.name}</button>)}
+                  {!avail.length && <span className="muted small-text">No other mods to equip here yet.</span>}
+                </div>
+              </div>
+            );
+          })}
+          <h3>All mods ({ownedMods.size}/{MOD_LIST.length} unlocked)</h3>
+          <div className="grid items">
+            {MOD_LIST.map((m) => {
+              const has = ownedMods.has(m.id);
+              return (
+                <div key={m.id} className={`panel item ${has ? '' : 'locked'}`}>
+                  <span className="emoji big">{m.icon}</span>
+                  <strong>{m.name}</strong>
+                  <span className="small-text" style={{ color: RARITIES[m.rarity].color }}>{RARITIES[m.rarity].name}</span>
+                  <span className="small-text">{m.desc}</span>
+                  <span className="muted small-text">Fits: {modFits(m.id)}</span>
+                  {has ? <span className="ok">Unlocked</span> : <span className="muted small-text">{modSource(m.id)}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {tab === 'Titles' && (
         <>
           <p className="muted">Titles show next to your name on the leaderboard and your profile. Earn them by playing.{profile?.equipped_title && <> Equipped: <TitleTag id={profile.equipped_title} /></>}</p>
@@ -103,6 +165,7 @@ export default function CollectionPage() {
                 <div key={t.id} className={`panel item ${has ? '' : 'locked'}`}>
                   <TitleTag id={t.id} />
                   <span className="small-text">{t.desc}</span>
+                  {t.mod && <span className="small-text gold">Reward: {MODS[t.mod].icon} {MODS[t.mod].name} mod</span>}
                   {has ? <button className="btn small" onClick={() => act(() => backend.equipTitle(equipped ? null : t.id), equipped ? 'Title removed' : 'Title equipped')}>{equipped ? 'Remove' : 'Equip'}</button>
                     : <div className="progress" aria-label={`${cur} of ${target}`}><i style={{ width: `${(cur / target) * 100}%` }} /><span>{cur.toLocaleString()} / {target.toLocaleString()}</span></div>}
                 </div>

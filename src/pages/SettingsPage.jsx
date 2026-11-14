@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useApp } from '../lib/AppContext.jsx';
+import FeedbackModal from '../components/FeedbackModal.jsx';
 import { backend } from '../lib/backend/index.js';
 import { sfx } from '../game/audio.js';
 
 export default function SettingsPage() {
   const { settings, setSetting, user, setAuthOpen, isDemo, showToast, act } = useApp();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const Toggle = ({ k, label, hint }) => (
     <label className="toggle"><input type="checkbox" checked={!!settings[k]} onChange={(e) => setSetting({ [k]: e.target.checked })} /><span><b>{label}</b>{hint && <small>{hint}</small>}</span></label>
   );
@@ -28,6 +31,13 @@ export default function SettingsPage() {
           </select>
         </label>
       </div>
+      <div className="panel">
+        <h2>Feedback</h2>
+        <p>Found a bug, or have an idea for the game? We read everything.</p>
+        <button className="btn" onClick={() => (!user && !isDemo ? setAuthOpen(true) : setFeedbackOpen(true))}>Send feedback or a suggestion</button>
+        {!user && !isDemo && <p className="muted small-text">Sign in first. This keeps spam out.</p>}
+      </div>
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
       <div className="panel">
         <h2>Account</h2>
         {user ? (

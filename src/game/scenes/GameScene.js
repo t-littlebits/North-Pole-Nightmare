@@ -3,6 +3,7 @@ import { CHARACTERS, ENEMIES, BOSSES, WAVE_SECONDS, DEFAULT_WEAPONS } from '../.
 import { rollUpgrades, applyUpgrade } from '../../data/upgrades.js';
 import { ENEMY_CAP, spawnInterval, spawnCount, computeScore } from '../../shared/rules.js';
 import { ARENAS } from '../../data/arenas.js';
+import { sanitizeLoadout } from '../../data/mods.js';
 import { buildTextures } from '../textures.js';
 import { bus } from '../bus.js';
 import { sfx } from '../audio.js';
@@ -33,8 +34,8 @@ export default class GameScene extends Phaser.Scene {
     const ch = (this.ch = CHARACTERS[cfg.character]);
     this.settings = getSettings();
     this.arena = ARENAS[cfg.arena] || ARENAS.village;
-    this.mods = {}; this.hazards = []; this.fires = []; this.delayed = []; this.allies = []; this.zones = [];
-    this.storm = null; this.beam = null; this.chimeAt = 0; this.flickerAt = 15000;
+    this.mods = sanitizeLoadout(cfg.loadout); this.hazards = []; this.fires = []; this.delayed = []; this.allies = []; this.atkCount = {};
+    this.storm = null; this.beam = null; this.chimeAt = 0;
     buildTextures(this, cfg.character, cfg.skin, this.arena);
     this.cameras.main.setBackgroundColor(this.arena.bg);
 
@@ -88,7 +89,6 @@ export default class GameScene extends Phaser.Scene {
     this.boss = null;
     this.popCount = 0;
     this.cards = [];
-    this.dark = this.arena.dark ? this.add.rectangle(VIEW_W / 2, VIEW_H / 2, VIEW_W, VIEW_H, 0x050818, this.arena.dark).setScrollFactor(0).setDepth(4500) : null;
 
     // ---- input ----
     this.keys = this.input.keyboard.addKeys({ up: 'W', left: 'A', down: 'S', right: 'D', space: 'SPACE', p: 'P', esc: 'ESC' });
@@ -142,12 +142,6 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < 40; i++) {
       const sp = this.add.image(rnd(40, WORLD_W - 40), rnd(70, WORLD_H - 40), 'spark').setDepth(1).setAlpha(0).setTint(A.spark);
       this.tweens.add({ targets: sp, alpha: 0.9, duration: rnd(700, 1800), yoyo: true, repeat: -1, delay: rnd(0, 2000) });
-    }
-    for (let i = 0; i < A.sticky; i++) {
-      const x = rnd(160, WORLD_W - 160), y = rnd(200, WORLD_H - 160), r = rnd(70, 110);
-      if (Math.hypot(x - WORLD_W / 2, y - WORLD_H / 2) < 220) continue;
-      this.add.circle(x, y, r, 0xff7ab8, 0.3).setStrokeStyle(4, 0xffffff, 0.4).setDepth(0);
-      this.zones.push({ x, y, r });
     }
   }
 
@@ -236,12 +230,7 @@ export default class GameScene extends Phaser.Scene {
       }
     } else {
       this.dash = null;
-      let sp = this.stats.speed;
-      if (this.zones.length && this.inZone()) sp *= 0.55;
-      if (this.arena.ice) {
-        const k = Math.min(1, dt * 2.6), v = this.player.body.velocity;
-        this.player.setVelocity(v.x + (vx * sp - v.x) * k, v.y + (vy * sp - v.y) * k);
-      } else this.player.setVelocity(vx * sp, vy * sp);
+      this.player.setVelocity(vx * this.stats.speed, vy * this.stats.speed);
     }
     this.player.setDepth(this.player.y);
     this.shadow.setPosition(this.player.x, this.player.y + 16);
@@ -334,16 +323,22 @@ export default class GameScene extends Phaser.Scene {
       if (t !== undefined && this.runMs - t < 350) return;
       b.hits.set(e, this.runMs);
       this.damageEnemy(e, this.dmgOf(b.dmg));
-      if (b.slow && e.active) e.slowUntil = this.runMs + 1500;
+      this.weaponProc('candycane', e);
       return;
     }
     if (b.lastHit === e) return;
     b.lastHit = e;
     this.damageEnemy(e, this.dmgOf(b.dmg));
-    if (b.slow && e.active) e.slowUntil = this.runMs + 2000;
-    if (b.split && !b.mini && !b.didSplit) {
-      b.didSplit = true;
-      for (const d of [-0.7, 0.7]) this.spawnSnowball(b.x, b.y, b.ang + d, b.dmg * 0.5, { mini: true, life: 700, speed: 340, scale: 0.7 }).lastHit = e;
+    this.weaponProc('snowball', e);
+    if (this.hasMod('snowball', 'ricochet') && !b.bounced) {
+      const t = this.nearestTo(e.x, e.y, 320, e);
+      if (t) {
+        b.bounced = true;
+        b.ang = Math.atan2(t.y - b.y, t.x - b.x);
+        b.setVelocity(Math.cos(b.ang) * 400, Math.sin(b.ang) * 400);
+        b.expire = Math.max(b.expire, this.runMs + 900);
+        return;
+      }
     }
     if (b.pierce > 0) b.pierce -= 1; else b.destroy();
   }
@@ -369,7 +364,14 @@ export default class GameScene extends Phaser.Scene {
       this.wcd[id] = (this.wcd[id] ?? 300) - delta * this.stats.atk;
       if (this.wcd[id] <= 0) {
         const fired = this[`fire_${id}`](lvl);
-        this.wcd[id] = fired ? COOLDOWN[id](lvl) * this.cdMul(id) : 120;
+        this.wcd[id] = fired ? COOLDOWN[id](lvl) : 120;
+      if (fired) {
+        this.atkCount[id] = (this.atkCount[id] || 0) + 1;
+        if (this.atkCount[id] % 5 === 0 && this.hasMod(id, 'echo')) {
+          if (this.popCount < 10) this.popText(this.player.x, this.player.y - 28, 'ECHO', '#9be7ff');
+          this.later(240, () => { if (!this.ended) this[`fire_${id}`](lvl); });
+        }
+      }
       }
     }
     if (this.weapons.bells) this.updateBells(dt);
@@ -387,25 +389,20 @@ export default class GameScene extends Phaser.Scene {
 
   spawnSnowball(x, y, a, dmg, o = {}) {
     const b = this.bullets.create(x, y, 'w_snowball');
-    b.kind = 'snowball'; b.dmg = dmg; b.pierce = o.pierce || 0; b.expire = this.runMs + (o.life || 1500);
-    b.slow = !!o.slow; b.split = !!o.split; b.mini = !!o.mini; b.ang = a;
+    b.kind = 'snowball'; b.dmg = dmg; b.pierce = o.pierce || 0; b.expire = this.runMs + 1500; b.ang = a; b.seek = !!o.seek; b.bounced = false;
     b.setDepth(y + 2); b.body.setSize(10, 10);
-    if (o.scale) b.setScale(o.scale);
-    b.setVelocity(Math.cos(a) * (o.speed || 400), Math.sin(a) * (o.speed || 400));
+    b.setVelocity(Math.cos(a) * 400, Math.sin(a) * 400);
     return b;
   }
 
   fire_snowball(lvl) {
     const t = this.nearestEnemy();
     if (!t) return false;
-    const heavy = this.hasMod('snowball', 'heavy');
     const count = 1 + Math.floor((lvl - 1) / 2) + this.stats.proj;
     const base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
+    const seek = this.hasMod('snowball', 'seeker');
     for (let i = 0; i < count; i++) {
-      const a = base + (i - (count - 1) / 2) * 0.18;
-      this.spawnSnowball(this.player.x, this.player.y, a, (8 + 3 * (lvl - 1)) * (heavy ? 1.6 : 1), {
-        pierce: (lvl >= 4 ? 1 : 0) + (heavy ? 1 : 0), slow: this.hasMod('snowball', 'frozen_core'), split: this.hasMod('snowball', 'split'), scale: heavy ? 1.5 : 1
-      });
+      this.spawnSnowball(this.player.x, this.player.y, base + (i - (count - 1) / 2) * 0.18, 8 + 3 * (lvl - 1), { pierce: lvl >= 4 ? 1 : 0, seek });
     }
     sfx('shoot');
     return true;
@@ -414,30 +411,26 @@ export default class GameScene extends Phaser.Scene {
   fire_candycane(lvl) {
     const t = this.nearestEnemy(600);
     if (!t) return false;
-    const razor = this.hasMod('candycane', 'razor'), sticky = this.hasMod('candycane', 'sticky');
     const count = 1 + Math.floor((lvl - 1) / 3) + Math.floor(this.stats.proj / 2);
     const base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
-    const toss = (a) => {
+    for (let i = 0; i < count; i++) {
+      const a = base + (i - (count - 1) / 2) * 0.5;
       const b = this.bullets.create(this.player.x, this.player.y, 'w_candycane');
-      b.kind = 'cane'; b.dmg = (12 + 4 * (lvl - 1)) * (razor ? 1.4 : 1); b.back = razor ? 560 : 430; b.slow = sticky;
-      b.t0 = this.runMs; b.phase = 'out'; b.hits = new Map(); b.expire = this.runMs + 4000;
+      b.kind = 'cane'; b.dmg = 12 + 4 * (lvl - 1); b.t0 = this.runMs; b.phase = 'out'; b.hits = new Map(); b.expire = this.runMs + 5000;
       b.setScale(1.4).setDepth(this.player.y + 2); b.body.setSize(14, 14);
       b.setVelocity(Math.cos(a) * 340, Math.sin(a) * 340);
-    };
-    for (let i = 0; i < count; i++) toss(base + (i - (count - 1) / 2) * 0.5);
-    if (this.hasMod('candycane', 'boomerang_pair')) toss(base + Math.PI);
+    }
     sfx('shoot');
     return true;
   }
 
-  blastRadius(lvl) { return (90 + 14 * lvl) * (this.hasMod('iceblast', 'glacier') ? 1.3 : 1); }
+  blastRadius(lvl) { return 90 + 14 * lvl; }
 
   fire_iceblast(lvl) {
     const radius = this.blastRadius(lvl);
     const px = this.player.x, py = this.player.y;
     if (!this.enemies.getChildren().some((e) => e.active && !e.dead && Math.hypot(e.x - px, e.y - py) < radius * 1.25)) return false;
     this.novaBlast(lvl);
-    if (this.hasMod('iceblast', 'echo')) this.later(500, () => { if (!this.ended) this.novaBlast(lvl); });
     return true;
   }
 
@@ -445,18 +438,19 @@ export default class GameScene extends Phaser.Scene {
     const radius = this.blastRadius(lvl);
     const px = this.player.x, py = this.player.y;
     const dmg = 10 + 4 * lvl;
-    const knockback = lvl >= 3 || this.hasMod('iceblast', 'glacier');
-    const execute = this.hasMod('iceblast', 'shatter');
+    const deep = this.hasMod('iceblast', 'deepfreeze');
     for (const e of this.enemies.getChildren().slice()) {
       if (!e.active || e.dead) continue;
       const d = Math.hypot(e.x - px, e.y - py);
       if (d > radius + 14) continue;
       e.slowUntil = this.runMs + 2000;
-      if (knockback) this.knock(e, (e.x - px) / (d || 1), (e.y - py) / (d || 1), 220, 180);
+      if (lvl >= 3) this.knock(e, (e.x - px) / (d || 1), (e.y - py) / (d || 1), 220, 180);
       this.damageEnemy(e, this.dmgOf(dmg));
-      if (execute && e.active && !e.dead && !e.boss && e.hp <= e.maxHp * 0.25) this.killEnemy(e);
+      this.weaponProc('iceblast', e);
+      if (deep && e.active && !e.dead && !e.boss && Math.random() < 0.15) { e.frozenUntil = this.runMs + 1000; e.setTint(0x99ddff); }
     }
     this.ring(px, py, radius, 0x7fd8ff);
+    if (this.hasMod('iceblast', 'lingering')) this.addPatch(px, py, radius * 0.7, 3000, 0x9fe6ff);
     sfx('special');
   }
 
@@ -471,37 +465,40 @@ export default class GameScene extends Phaser.Scene {
       this.tweens.add({
         targets: bomb, x: tx, y: ty, duration: 520, ease: 'Sine.easeOut',
         onUpdate: (tw) => bomb.setAngle(tw.progress * 540),
-        onComplete: () => { bomb.destroy(); if (!this.ended) this.detonate(tx, ty, lvl, 1); }
+        onComplete: () => { bomb.destroy(); if (!this.ended) this.detonate(tx, ty, lvl); }
       });
     }
     return true;
   }
 
-  detonate(x, y, lvl, scale) {
-    const big = this.hasMod('bomb', 'big_boom');
-    const radius = (70 + 8 * lvl) * (big ? 1.4 : 1) * scale;
-    const dmg = this.dmgOf(25 + 8 * lvl) * (big ? 1.3 : 1) * scale;
-    this.explode(x, y, radius, dmg);
-    if (scale < 1) return;
-    if (this.hasMod('bomb', 'glaze')) this.addFire(x, y, radius * 0.8, 5 + lvl);
-    if (this.hasMod('bomb', 'cluster')) {
-      for (let k = 0; k < 3; k++) {
-        const a = (k / 3) * Math.PI * 2 + Math.random();
-        this.later(150 + k * 120, () => { if (!this.ended) this.detonate(x + Math.cos(a) * 90, y + Math.sin(a) * 90, lvl, 0.5); });
+  detonate(x, y, lvl) {
+    const radius = 70 + 8 * lvl, dmg = 25 + 8 * lvl;
+    const boom = () => {
+      if (this.ended) return;
+      this.explode(x, y, radius, this.dmgOf(dmg));
+      if (this.hasMod('bomb', 'glaze')) this.addPatch(x, y, radius * 0.9, 3000, 0xff9ad5);
+    };
+    if (this.hasMod('bomb', 'gravity')) {
+      for (const e of this.enemies.getChildren()) {
+        if (!e.active || e.dead) continue;
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d < radius * 1.8 && d > 8) this.knock(e, (x - e.x) / d, (y - e.y) / d, 280, 220);
       }
-    }
+      this.ring(x, y, radius * 1.4, 0x9a6bff);
+      this.later(260, boom);
+    } else boom();
   }
 
-  addFire(x, y, r, dmg) {
-    const sprite = this.add.circle(x, y, r, 0xff7a00, 0.25).setStrokeStyle(3, 0xffcf4a, 0.6).setDepth(1);
-    this.fires.push({ x, y, r, dmg, sprite, until: this.runMs + 3500, next: this.runMs });
+  addPatch(x, y, r, ms, color) {
+    const sprite = this.add.circle(x, y, r, color, 0.22).setStrokeStyle(3, color, 0.6).setDepth(1);
+    this.fires.push({ x, y, r, slow: true, sprite, until: this.runMs + ms, next: this.runMs });
   }
 
   explode(x, y, radius, dmg) {
     for (const e of this.enemies.getChildren().slice()) {
       if (!e.active || e.dead) continue;
       const d = Math.hypot(e.x - x, e.y - y);
-      if (d < radius + 12) this.damageEnemy(e, dmg * (1 - (d / (radius + 12)) * 0.4));
+      if (d < radius + 12) { this.damageEnemy(e, dmg * (1 - (d / (radius + 12)) * 0.4)); this.weaponProc('bomb', e, x, y); }
     }
     this.ring(x, y, radius, 0xff9a3c);
     this.burst(x, y, 0xffcf4a, 8);
@@ -511,53 +508,81 @@ export default class GameScene extends Phaser.Scene {
 
   updateBells(dt) {
     const lvl = this.weapons.bells;
-    const tuned = this.hasMod('bells', 'tuned');
-    const count = 2 + Math.floor((lvl - 1) / 2) + Math.floor(this.stats.proj / 2) + (this.hasMod('bells', 'resonance') ? 2 : 0);
+    const count = 2 + Math.floor((lvl - 1) / 2) + Math.floor(this.stats.proj / 2);
     while (this.bells.length < count) this.bells.push(this.add.image(0, 0, 'w_bells').setScale(1.8));
     while (this.bells.length > count) this.bells.pop().destroy();
     const radius = 66 + 5 * lvl;
     this.bellAngle += (2.6 + 0.2 * lvl) * dt * Math.min(1.8, 0.7 + 0.3 * this.stats.atk);
-    const dmg = (7 + 2.5 * lvl) * (tuned ? 1.4 : 1);
+    const dmg = 7 + 2.5 * lvl;
+    const counter = this.hasMod('bells', 'counter');
     this.bells.forEach((b, i) => {
-      const a = this.bellAngle + (i * Math.PI * 2) / count;
-      b.setPosition(this.player.x + Math.cos(a) * radius, this.player.y + Math.sin(a) * radius).setDepth(this.player.y + 3).setAngle(Math.sin(this.runMs / 70 + i) * 18).setScale(tuned ? 2.4 : 1.8);
+      const a = (counter && i % 2 ? -this.bellAngle : this.bellAngle) + (i * Math.PI * 2) / count;
+      b.setPosition(this.player.x + Math.cos(a) * radius, this.player.y + Math.sin(a) * radius).setDepth(this.player.y + 3).setAngle(Math.sin(this.runMs / 70 + i) * 18);
       for (const e of this.enemies.getChildren()) {
         if (!e.active || e.dead) continue;
         if (this.runMs < (e.bellUntil || 0)) continue;
-        const reach = 20 + (e.boss ? 40 : 10) + (tuned ? 10 : 0);
+        const reach = 20 + (e.boss ? 40 : 10);
         if (Math.abs(e.x - b.x) < reach && Math.abs(e.y - b.y) < reach) {
           e.bellUntil = this.runMs + 450;
           const d = Math.hypot(e.x - this.player.x, e.y - this.player.y) || 1;
           this.knock(e, (e.x - this.player.x) / d, (e.y - this.player.y) / d, 160, 120);
           this.damageEnemy(e, this.dmgOf(dmg));
+          this.weaponProc('bells', e);
         }
       }
     });
     if (this.hasMod('bells', 'chime') && this.runMs >= this.chimeAt) {
       this.chimeAt = this.runMs + 3000;
-      for (const e of this.enemies.getChildren().slice()) {
-        if (e.active && !e.dead && Math.hypot(e.x - this.player.x, e.y - this.player.y) < 160) this.damageEnemy(e, this.dmgOf(dmg * 1.5));
+      for (const e of this.enemies.getChildren()) {
+        if (!e.active || e.dead) continue;
+        const d = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+        if (d < 170) this.knock(e, (e.x - this.player.x) / (d || 1), (e.y - this.player.y) / (d || 1), 320, 220);
       }
-      this.ring(this.player.x, this.player.y, 160, 0xffcf4a);
+      this.ring(this.player.x, this.player.y, 170, 0xffcf4a);
       sfx('wave');
     }
   }
 
-  updateBullets() {
+  updateBullets(dt) {
+    const now = this.runMs;
     for (const b of this.bullets.getChildren().slice()) {
       if (!b.active) continue;
-      if (this.runMs > b.expire) { b.destroy(); continue; }
+      if (now > b.expire) { b.destroy(); continue; }
       if (b.kind === 'cane') {
-        b.rotation += 0.35;
-        if (b.phase === 'out' && this.runMs - b.t0 > 650) { b.phase = 'back'; b.hits.clear(); }
+        const whirl = this.hasMod('candycane', 'whirl');
+        b.rotation += b.phase === 'hover' ? 0.7 : 0.35;
+        if (b.phase === 'out' && now - b.t0 > (whirl ? 520 : 650)) {
+          b.hits.clear();
+          if (whirl) { b.phase = 'hover'; b.hoverUntil = now + 500; b.setVelocity(0, 0); } else b.phase = 'back';
+        } else if (b.phase === 'hover' && now >= b.hoverUntil) { b.phase = 'back'; b.hits.clear(); }
         if (b.phase === 'back') {
           const dx = this.player.x - b.x, dy = this.player.y - b.y, d = Math.hypot(dx, dy) || 1;
           if (d < 24) { b.destroy(); continue; }
-          b.setVelocity((dx / d) * (b.back || 430), (dy / d) * (b.back || 430));
+          b.setVelocity((dx / d) * 430, (dy / d) * 430);
+          if (this.hasMod('candycane', 'hook')) {
+            for (const e of this.enemies.getChildren()) {
+              if (!e.active || e.dead || now < (e.hookUntil || 0) || Math.hypot(e.x - b.x, e.y - b.y) > 34) continue;
+              e.hookUntil = now + 350;
+              const ex = this.player.x - e.x, ey = this.player.y - e.y, ed = Math.hypot(ex, ey) || 1;
+              this.knock(e, ex / ed, ey / ed, 190, 200);
+            }
+          }
+        }
+      } else if (b.kind === 'snowball') {
+        b.rotation += 0.2;
+        if (b.seek) {
+          const t = this.nearestTo(b.x, b.y, 280);
+          if (t) {
+            let diff = Math.atan2(t.y - b.y, t.x - b.x) - b.ang;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            b.ang += Math.max(-3.2 * dt, Math.min(3.2 * dt, diff));
+            b.setVelocity(Math.cos(b.ang) * 400, Math.sin(b.ang) * 400);
+          }
         }
       } else b.rotation += 0.2;
     }
-    for (const s of this.eshots.getChildren().slice()) if (s.active && this.runMs > s.expire) s.destroy();
+    for (const s of this.eshots.getChildren().slice()) if (s.active && now > s.expire) s.destroy();
   }
 
   // =====================================================================
@@ -643,9 +668,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   pickType() {
-    const w = this.run.wave, A = this.arena;
-    const opts = Object.values(ENEMIES).filter((d) => (d.id === 'ghost' && A.ghostFrom ? A.ghostFrom : d.from) <= w);
-    const weights = opts.map((d) => (d.weight + (w > d.from ? Math.min(3, (w - d.from) * 0.15) : 0)) * (A.bias[d.id] || 1));
+    const w = this.run.wave;
+    const opts = Object.values(ENEMIES).filter((d) => d.from <= w);
+    const weights = opts.map((d) => d.weight + (w > d.from ? Math.min(3, (w - d.from) * 0.15) : 0));
     let r = Math.random() * weights.reduce((a, b) => a + b, 0);
     for (let i = 0; i < opts.length; i++) { r -= weights[i]; if (r <= 0) return opts[i].id; }
     return opts[0].id;
@@ -715,7 +740,7 @@ export default class GameScene extends Phaser.Scene {
       const dx = px - e.x, dy = py - e.y;
       const dist = Math.hypot(dx, dy) || 1;
       const nx = dx / dist, ny = dy / dist;
-      const spd = e.spd * (this.runMs < e.slowUntil ? 0.5 : 1);
+      const spd = e.spd * (this.runMs < e.slowUntil ? 0.5 : 1) * (this.runMs < (e.snareUntil || 0) ? 0.25 : 1);
       e.setFlipX(dx < 0);
 
       if (e.boss && this.bossTick(e, nx, ny)) continue;
@@ -784,7 +809,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   addXp(n) {
-    this.run.xp += n * this.stats.xpMult * this.arena.xpBonus;
+    this.run.xp += n * this.stats.xpMult;
     while (this.run.xp >= xpNeeded(this.run.level)) {
       this.run.xp -= xpNeeded(this.run.level);
       this.run.level += 1;
@@ -794,7 +819,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   startLevelUp() {
-    this.cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, mods: this.mods, available: this.available });
+    this.cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available });
     this.freeze(true);
     this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.1);
     sfx('level');
@@ -803,7 +828,7 @@ export default class GameScene extends Phaser.Scene {
 
   chooseUpgrade(i) {
     if (!this.cards.length || !this.cards[i]) return;
-    applyUpgrade(this.cards[i], this.stats, this.weapons, this.mods);
+    applyUpgrade(this.cards[i], this.stats, this.weapons);
     this.cards = [];
     this.pendingLevels -= 1;
     if (this.pendingLevels > 0) this.startLevelUp();
@@ -905,19 +930,26 @@ export default class GameScene extends Phaser.Scene {
   // =====================================================================
   hasMod(w, id) { return (this.mods[w] || []).includes(id); }
 
-  cdMul(id) { return id === 'snowball' && this.hasMod('snowball', 'heavy') ? 1.25 : 1; }
+  /** Proc effects from equipped mods. These never add damage; they only move, slow or stun enemies. */
+  weaponProc(w, e, ox, oy) {
+    const m = this.mods[w];
+    if (!m || !m.length || !e.active || e.dead) return;
+    const fx = ox ?? this.player.x, fy = oy ?? this.player.y;
+    const dx = e.x - fx, dy = e.y - fy, d = Math.hypot(dx, dy) || 1;
+    if (m.includes('gust') && Math.random() < 0.2) this.knock(e, dx / d, dy / d, 300, 220);
+    if (m.includes('frost') && Math.random() < 0.25) e.slowUntil = Math.max(e.slowUntil || 0, this.runMs + 2000);
+    if (!e.boss) {
+      if (m.includes('stun') && Math.random() < 0.08) { e.frozenUntil = this.runMs + 1000; e.setTint(0xffee77); }
+      if (m.includes('snare') && Math.random() < 0.15) e.snareUntil = this.runMs + 1500;
+    }
+  }
 
   later(ms, fn) { this.delayed.push({ at: this.runMs + ms, fn }); }
 
-  inZone() {
-    for (const z of this.zones) if (Math.hypot(this.player.x - z.x, this.player.y - z.y) < z.r) return true;
-    return false;
-  }
-
-  nearestTo(x, y, maxDist) {
+  nearestTo(x, y, maxDist, exclude = null) {
     let best = null, bd = maxDist * maxDist;
     for (const e of this.enemies.getChildren()) {
-      if (!e.active || e.dead) continue;
+      if (!e.active || e.dead || e === exclude) continue;
       const d = (e.x - x) ** 2 + (e.y - y) ** 2;
       if (d < bd) { bd = d; best = e; }
     }
@@ -993,9 +1025,9 @@ export default class GameScene extends Phaser.Scene {
       const f = this.fires[i];
       if (now >= f.until) { f.sprite.destroy(); this.fires.splice(i, 1); continue; }
       if (now >= f.next) {
-        f.next = now + 400;
-        for (const e of this.enemies.getChildren().slice()) {
-          if (e.active && !e.dead && Math.hypot(e.x - f.x, e.y - f.y) < f.r) this.damageEnemy(e, this.dmgOf(f.dmg));
+        f.next = now + 250;
+        for (const e of this.enemies.getChildren()) {
+          if (e.active && !e.dead && Math.hypot(e.x - f.x, e.y - f.y) < f.r) e.slowUntil = Math.max(e.slowUntil || 0, now + 400);
         }
       }
     }
@@ -1010,11 +1042,6 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    if (this.dark && now >= this.flickerAt) {
-      this.flickerAt = now + 14000 + Math.random() * 6000;
-      this.dark.setAlpha(0.78);
-      this.later(350, () => this.dark.setAlpha(this.arena.dark));
-    }
   }
 
   // =====================================================================
@@ -1155,7 +1182,7 @@ export default class GameScene extends Phaser.Scene {
       waveLeft: Math.max(0, Math.ceil((WAVE_SECONDS * 1000 - this.waveMs) / 1000)), kills: this.run.kills,
       score: computeScore({ killPoints: this.run.killPoints, bosses: this.run.bosses, wave: this.run.wave, seconds: this.runMs / 1000, presents: this.run.presents }),
       special: { cd: this.sp.cd, max: this.sp.max, name: this.ch.ability.name },
-      weapons: { ...this.weapons }, mods: Object.fromEntries(Object.entries(this.mods).map(([k, v]) => [k, v.length])), rage: this.runMs < this.rageUntil, time: Math.floor(this.runMs / 1000), force: !!force
+      weapons: { ...this.weapons }, rage: this.runMs < this.rageUntil, time: Math.floor(this.runMs / 1000), force: !!force
     });
   }
 }

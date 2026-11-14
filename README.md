@@ -51,8 +51,10 @@ Push to GitHub, then Netlify → **Add new site → Import from Git**. Build com
 3. Functions crash with a "WebSocket library missing" stack trace: run `npm install` (installs `ws`, which the functions pass to supabase-js) and commit the updated `package-lock.json`.
 4. After changing env vars on Netlify, trigger a fresh deploy.
 
-## Updating an existing install (titles)
-If you set up the database before titles existed, run `supabase/update-2-titles.sql` once in the SQL Editor (new installs get everything from `schema.sql`), then redeploy.
+## Updating an existing install
+New installs get everything from `schema.sql`. If you installed earlier, run these once in the SQL Editor, in order, then redeploy:
+1. `supabase/update-2-titles.sql` (titles), if you have not already.
+2. `supabase/update-3-mods-feedback.sql` (equippable weapon mods and the feedback table).
 
 ## Giving yourself the Owner title
 Titles that are earned in-game (kills, waves, bosses, advent, collection...) unlock automatically. Manual titles (`owner`, `founder`) can only be granted from the Supabase SQL Editor, which nobody else can reach:
@@ -90,8 +92,9 @@ tests/         node:test suites (+ a mock Phaser for headless runs)
 
 ## Game notes
 - **Bosses** have two phases. Each boss cycles through its own attacks (rings, aimed fans, spirals, telegraphed slams and rain, minion summons, charges, blinks) and goes **enraged** at 50% HP with a brief invulnerable roar, faster movement and a harder move list.
-- **Arenas:** Santa's Village (default), Frozen Lake (slippery ice, wave 5), Gingerbread Town (sticky syrup, wave 8), Haunted Workshop (ghosts from wave 1, flickering dark, +25% XP, wave 12). Reach the wave in any run to unlock; the server checks it.
-- **Weapon mods:** a weapon at level 3 offers a mod, and a second one at level 6 (3 mods per weapon, e.g. Splitter snowballs, Burning Glaze bombs, Echo Frost).
+- **Arenas:** Santa's Village, Frozen Lake, Gingerbread Town and Santa's Workshop. They are purely cosmetic (different ground, props and snow colour) and one is picked at random for every run.
+- **Weapon mods** are a collection. Every weapon has 3 mod slots; equip mods in **Collection → Mods** before a run. Mods change *behaviour* (Wind Gust knockback, Frost Touch slow, Echo repeats every 5th attack, Ricochet, Heat Seeker, Candy Hook, Gravity Gingerbread...) and never add damage, attack speed or XP. 15 mods, unlocked by: earning titles (11 mods), advent doors 4/9/15/18 (4 mods), a ~2% chance per mystery present (rolled by the server after the run), or a 500-coin Mod Crate.
+- **Feedback:** Settings → *Send feedback or a suggestion*. Signed-in players only (spam control), max 5 per hour. Read the messages in Supabase → Table Editor → `feedback`. In demo mode they are kept on the device.
 - **Hero abilities:** Snowman *Blizzard Storm*, Reindeer *Red Nose Beam*, Gingerbread Knight *Gingerbread Garrison*.
 - Heroes: Santa, Elf (free); Snowman, Reindeer, Gingerbread Knight (coins or Advent).
 - Weapons: snowballs, candy canes, ice blast (free); Christmas bells, gingerbread bombs (coins or Advent). Unlocked weapons join the level-up pool.

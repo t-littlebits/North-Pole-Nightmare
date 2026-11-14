@@ -68,7 +68,7 @@ export const online = {
     return { user: { id: user.id, username: p.data.username }, profile: p.data, inventory: inv.data || [], claims: cl.data || [], titles: (tt.data || []).map((t) => t.title_id) };
   },
 
-  startRun: (character, arena = 'village') => call('start-run', { character, arena }),
+  startRun: (character) => call('start-run', { character }),
   submitRun: (runId, stats) => call('submit-score', { runId, stats }),
 
   async getLeaderboard(limit = 50) {
@@ -88,6 +88,9 @@ export const online = {
   select: ({ character, skin }) => call('inventory', { action: 'select', character, skin }),
   setBoost: (id) => call('inventory', { action: 'boost', id }),
   equipTitle: (id) => call('inventory', { action: 'title', id }),
+  equipLoadout: (weapon, mods) => call('inventory', { action: 'loadout', weapon, mods }),
+  buyModCrate: () => call('inventory', { action: 'crate' }),
+  sendFeedback: ({ kind, message }) => call('send-feedback', { kind, message, page: window.location.pathname }),
 
   async saveSettings(settings) {
     const { data } = await supabase.auth.getSession();
