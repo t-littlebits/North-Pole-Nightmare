@@ -55,6 +55,7 @@ Push to GitHub, then Netlify → **Add new site → Import from Git**. Build com
 New installs get everything from `schema.sql`. If you installed earlier, run these once in the SQL Editor, in order, then redeploy:
 1. `supabase/update-2-titles.sql` (titles), if you have not already.
 2. `supabase/update-3-mods-feedback.sql` (equippable weapon mods and the feedback table).
+3. `supabase/update-4-free-heroes.sql` (heroes are free, so a run no longer needs an inventory row for the hero).
 
 ## Giving yourself the Owner title
 Titles that are earned in-game (kills, waves, bosses, advent, collection...) unlock automatically. Manual titles (`owner`, `founder`) can only be granted from the Supabase SQL Editor, which nobody else can reach:
@@ -93,11 +94,11 @@ tests/         node:test suites (+ a mock Phaser for headless runs)
 ## Game notes
 - **Bosses** have two phases. Each boss cycles through its own attacks (rings, aimed fans, spirals, telegraphed slams and rain, minion summons, charges, blinks) and goes **enraged** at 50% HP with a brief invulnerable roar, faster movement and a harder move list.
 - **Arenas:** Santa's Village, Frozen Lake, Gingerbread Town and Santa's Workshop. They are purely cosmetic (different ground, props and snow colour) and one is picked at random for every run.
-- **Weapon mods** are a collection. Every weapon has 3 mod slots; equip mods in **Collection → Mods** before a run. Mods change *behaviour* (Wind Gust knockback, Frost Touch slow, Echo repeats every 5th attack, Ricochet, Heat Seeker, Candy Hook, Gravity Gingerbread...) and never add damage, attack speed or XP. 15 mods, unlocked by: earning titles (11 mods), advent doors 4/9/15/18 (4 mods), a ~2% chance per mystery present (rolled by the server after the run), or a 500-coin Mod Crate.
+- **Weapon mods** are a collection. Every weapon has 3 mod slots; equip mods in **Collection → Mods** before a run. Mods change *behaviour* (Wind Gust knockback, Frost Touch slow, Echo repeats every 5th attack, Ricochet, Heat Seeker, Candy Hook, Gravity Gingerbread...) and never add damage, attack speed or XP. 15 mods. Eleven are awarded by titles, four by advent doors 4/9/15/18. Luck sources (a ~2% chance per mystery present, rolled by the server after the run, and the 500-coin Mod Crate) only ever give those four advent mods, never one a title can award.
+- **Mouse aiming:** Settings → *Aim attacks with the mouse* (desktop, off by default). Snowballs, candy canes and bombs fire at the cursor instead of the nearest enemy, dashes follow it, and a crosshair appears. Touch screens always auto-aim.
 - **Feedback:** Settings → *Send feedback or a suggestion*. Signed-in players only (spam control), max 5 per hour. Read the messages in Supabase → Table Editor → `feedback`. In demo mode they are kept on the device.
 - **Hero abilities:** Snowman *Blizzard Storm*, Reindeer *Red Nose Beam*, Gingerbread Knight *Gingerbread Garrison*.
-- Heroes: Santa, Elf (free); Snowman, Reindeer, Gingerbread Knight (coins or Advent).
-- Weapons: snowballs, candy canes, ice blast (free); Christmas bells, gingerbread bombs (coins or Advent). Unlocked weapons join the level-up pool.
+- Heroes: all five (Santa, Elf, Snowman, Reindeer, Gingerbread Knight) and all five weapons are free from the start. Coins buy skins; mods come from titles, the advent calendar and luck.
 - Upgrades come in Common / Rare / Epic / Legendary; luck and wave number shift the odds.
 - Bosses arrive every 5th wave. Mystery presents can heal, blast, freeze, magnetise... or summon enemies.
 - Advent doors open at 00:00 **UTC** on 1-24 December (midnight GMT for UK players).

@@ -15,7 +15,7 @@ test('demo backend: full player journey', async () => {
   assert.equal(me.profile.coins, 0);
   assert.ok(me.inventory.some((i) => i.item_id === 'santa'));
 
-  await assert.rejects(() => demo.startRun('snowman'), /not unlocked/);
+  await demo.startRun('snowman');   // every hero is free from the start
   const { runId } = await demo.startRun('santa');
   await assert.rejects(() => demo.submitRun(runId, { killPoints: 99999, kills: 5, bosses: 0, wave: 1, seconds: 3, presents: 0 }), /rejected/);
   const second = await demo.startRun('santa');
@@ -38,18 +38,18 @@ test('demo backend: advent past/future rules + shop', async () => {
   let me = await demo.getMe();
   assert.equal(me.profile.coins, 105); // 100 advent + 5 from the first run
   assert.ok(me.inventory.some((i) => i.item_id === 'elf_candy'));
-  await assert.rejects(() => demo.buy('character', 'snowman'), /Not enough/);
+  await assert.rejects(() => demo.buy('character', 'snowman'), /cannot be bought/);   // heroes are free, not for sale
   await assert.rejects(() => demo.buy('skin', 'santa_gold'), /cannot be bought/); // advent exclusive
   clock.set('2026-12-24T00:00:00Z');
   await demo.claimDay(24);
   me = await demo.getMe();
   assert.ok(me.inventory.some((i) => i.item_id === 'santa_aurora'));
   assert.equal(me.profile.coins, 1105);
-  await demo.buy('character', 'snowman');
+  await demo.buy('skin', 'santa_frost');   // skins are still bought with coins
   await demo.select({ character: 'elf', skin: 'elf_candy' });
   me = await demo.getMe();
   assert.equal(me.profile.equipped.elf, 'elf_candy');
-  assert.equal(me.profile.coins, 605);
+  assert.equal(me.profile.coins, 1105 - 400);
   clock.set(null);
 });
 

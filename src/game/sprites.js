@@ -5,7 +5,7 @@ import { SKINS, defaultSkinFor } from '../data/catalog.js';
 export const PX = 3; // screen pixels per sprite pixel in-game
 
 const SANTA = [
-  '....RRRR....', '...RRRRRR..W', '..WWWWWWWW..', '..WSKSSKSW..', '..WSSSSSSW..', '..WWWWWWWW..',
+  '....RRRRR...', '...RRRRRRRW.', '..WWWWWWWW..', '..WSKSSKSW..', '..WSSSSSSW..', '..WWWWWWWW..',
   '.RRWWWWWWRR.', '.RRRRKKRRRR.', '.SRRRYYRRRS.', '..RRRRRRRR..', '..RRR..RRR..', '..BBB..BBB..'
 ];
 const ELF = [
@@ -37,7 +37,7 @@ const E_ELF = [
   '.SSSSSSSSSS.', '..SSFSSFSS..', '..GGGGGGGG.L', '.SGGGBBGGGSL', '..GG....GG.H', '..BB....BB..'
 ];
 const GHOST = [
-  '....RRRR....', '...RRRRRR.W.', '..WWWWWWWW..', '.WWWWWWWWWW.', '.WWKKWWKKWW.', '.WWKKWWKKWW.',
+  '....RRRRR...', '...RRRRRRRW.', '..WWWWWWWW..', '.WWWWWWWWWW.', '.WWKKWWKKWW.', '.WWKKWWKKWW.',
   '.WWWWKKWWWW.', '.WWWWKKWWWW.', '.WWWWWWWWWW.', '.WWWWWWWWWW.', '.WW.WWWW.WW.', '..W..WW..W..'
 ];
 

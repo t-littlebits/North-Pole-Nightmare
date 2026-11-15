@@ -24,6 +24,10 @@ export function buildTextures(scene, character, skinId, arena) {
   ['snowball', 'candycane', 'bells', 'bomb'].forEach((id) => make(`w_${id}`, 16, 16, (ctx) => drawSprite(ctx, ICONS[id].rows, ICONS[id].pal, 2)));
 
   make('ebullet', 12, 12, (ctx) => { rect(ctx, '#5a0010', 2, 0, 8, 12); rect(ctx, '#5a0010', 0, 2, 12, 8); rect(ctx, '#ff2a4a', 2, 2, 8, 8); rect(ctx, '#ffd0d8', 4, 4, 4, 4); });
+  make('crosshair', 24, 24, (ctx) => {
+    const arm = (c, w, inset) => { const o = (24 - w) / 2; rect(ctx, c, o, inset, w, 8 - inset); rect(ctx, c, o, 16, w, 8 - inset); rect(ctx, c, inset, o, 8 - inset, w); rect(ctx, c, 16, o, 8 - inset, w); };
+    arm('#070b1a', 6, 0); arm('#ffffff', 2, 1); rect(ctx, '#e63946', 11, 11, 2, 2);
+  });
   make('flake', 4, 4, (ctx) => { rect(ctx, '#ffffff', 0, 0, 4, 4); });
   make('spark', 6, 6, (ctx) => { rect(ctx, '#fff6b0', 2, 0, 2, 6); rect(ctx, '#fff6b0', 0, 2, 6, 2); });
   make('bit', 4, 4, (ctx) => { rect(ctx, '#ffffff', 0, 0, 4, 4); });

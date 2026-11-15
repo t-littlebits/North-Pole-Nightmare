@@ -113,7 +113,7 @@ export default function GamePage() {
       {!user && <p className="muted center-text">Playing as a guest: free heroes only, and your score will not be saved to the leaderboard.</p>}
       <div className="panel controls">
         <h3>Controls</h3>
-        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move · <kbd>Space</kbd> special · <kbd>P</kbd> pause · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick upgrades. Attacks are automatic. On touch screens, drag on the left side to move and tap GO for your special.</p>
+        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move · <kbd>Space</kbd> special · <kbd>P</kbd> pause · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick upgrades. Attacks are automatic (switch on mouse aiming in Settings to aim them yourself). On touch screens, drag on the left side to move and tap GO for your special.</p>
       </div>
     </div>
   );

@@ -6,6 +6,8 @@ import { ownedMods } from '../lib/mods.js';
 import { MOD_CRATE_PRICE, MAX_SLOTS, canEquip, rollModDrop } from '../../src/data/mods.js';
 
 const owns = async (sb, uid, type, id) => {
+  if (type === 'character' && CHARACTERS[id]?.price === 0) return true;   // heroes and weapons are free for everyone
+  if (type === 'weapon' && WEAPONS[id]?.price === 0) return true;
   const { data } = await sb.from('inventory').select('item_id').eq('user_id', uid).eq('item_type', type).eq('item_id', id).maybeSingle();
   return !!data;
 };
@@ -72,7 +74,7 @@ export default handler(async ({ sb, user, body }) => {
   if (action === 'crate') {
     // The server picks the mod and charges the coins atomically (buy_item refuses if you cannot afford it).
     const id = rollModDrop(await ownedMods(sb, user.id));
-    if (!id) return json(400, { error: 'You already own every mod' });
+    if (!id) return json(400, { error: 'There are no more mods the crate can give you' });
     const { error } = await sb.rpc('buy_item', { p_user: user.id, p_type: 'mod', p_id: id, p_price: MOD_CRATE_PRICE });
     if (error) return json(400, { error: error.message.includes('not_enough_coins') ? 'Not enough coins' : 'Could not open the crate' });
     return json(200, { ok: true, mod: id });

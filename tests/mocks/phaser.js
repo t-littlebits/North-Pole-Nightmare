@@ -33,8 +33,8 @@ export const sceneStub = {
   },
   tweens: { add: (cfg) => { try { cfg?.onComplete?.(); } catch (e) { throw e; } return chain(); }, pauseAll() {}, resumeAll() {}, killTweensOf() {} },
   time: { delayedCall: (ms, fn) => { events.delayed = fn; } },
-  cameras: { main: chain() },
-  input: { keyboard: { addKeys: () => ({ up: key(), left: key(), down: key(), right: key(), space: key(), p: key(), esc: key() }), createCursorKeys: () => ({ up: key(), left: key(), down: key(), right: key() }) }, addPointer() {}, on() {} },
+  cameras: { main: Object.assign(chain(), { scrollX: 0, scrollY: 0 }) },
+  input: { setDefaultCursor() {}, activePointer: { x: 0, y: 0, wasTouch: false }, keyboard: { addKeys: () => ({ up: key(), left: key(), down: key(), right: key(), space: key(), p: key(), esc: key() }), createCursorKeys: () => ({ up: key(), left: key(), down: key(), right: key() }) }, addPointer() {}, on() {} },
   sys: { game: { device: { input: { touch: false } } } },
   game: { registry: { get: () => globalThis.__runConfig } },
   events: { once() {} }

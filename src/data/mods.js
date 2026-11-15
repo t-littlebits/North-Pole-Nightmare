@@ -1,5 +1,7 @@
 // Weapon mods are a COLLECTION: you unlock them (titles, advent calendar, present drops, Mod Crates), then equip up to
 // three per weapon before a run. Mods change how a weapon behaves; none of them add damage, attack speed or XP.
+import { TITLES } from './titles.js';
+
 export const MAX_SLOTS = 3;
 export const PRESENT_MOD_RATE = 0.02;   // chance that any opened mystery present also contains a mod (rolled by the server)
 export const MOD_CRATE_PRICE = 500;     // coins
@@ -42,9 +44,13 @@ export function sanitizeLoadout(loadout, ownedMods = null, ownedWeapons = null) 
 }
 
 const RARITY_WEIGHT = { common: 5, rare: 3, epic: 1, legendary: 0.5 };
-/** Picks a random mod the player does not own yet (weighted by rarity), or null if they own them all. */
+// Mods that an achievement (title) can award. Random sources (presents, Mod Crates) never hand these out, so
+// anything you can earn by playing is not also a lottery prize.
+export const ACHIEVEMENT_MODS = new Set(TITLES.map((t) => t.mod).filter(Boolean));
+
+/** Picks a random mod the player does not own yet (weighted by rarity) from those no achievement gives, or null if none are left. */
 export function rollModDrop(owned, rng = Math.random) {
-  const pool = MOD_LIST.filter((m) => !owned.has(m.id));
+  const pool = MOD_LIST.filter((m) => !owned.has(m.id) && !ACHIEVEMENT_MODS.has(m.id));
   if (!pool.length) return null;
   let r = rng() * pool.reduce((a, m) => a + RARITY_WEIGHT[m.rarity], 0);
   for (const m of pool) { r -= RARITY_WEIGHT[m.rarity]; if (r <= 0) return m.id; }

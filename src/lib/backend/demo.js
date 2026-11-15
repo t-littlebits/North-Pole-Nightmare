@@ -72,7 +72,7 @@ function newUser(username) {
     }
   };
 }
-const owns = (u, type, id) => u.inventory.some((i) => i.item_type === type && i.item_id === id);
+const owns = (u, type, id) => (type === 'character' && CHARACTERS[id]?.price === 0) || (type === 'weapon' && WEAPONS[id]?.price === 0) || u.inventory.some((i) => i.item_type === type && i.item_id === id);
 const give = (u, type, id) => { if (!owns(u, type, id)) u.inventory.push({ item_type: type, item_id: id }); };
 const fail = (msg) => { throw new Error(msg); };
 
@@ -127,8 +127,7 @@ export const demo = {
     const runId = uid();
     u.runs[runId] = { character, boost, startedAt: Date.now(), submitted: false };
     save();
-    const weapons = new Set(u.inventory.filter((i) => i.item_type === 'weapon').map((i) => i.item_id));
-    return { runId, boost, loadout: sanitizeLoadout(u.profile.loadout, ownedModSet(u), weapons) };
+    return { runId, boost, loadout: sanitizeLoadout(u.profile.loadout, ownedModSet(u)) };
   },
 
   async submitRun(runId, stats) {
@@ -219,7 +218,7 @@ export const demo = {
     const u = me() || fail('Sign in first');
     if (u.profile.coins < MOD_CRATE_PRICE) fail('Not enough coins');
     const id = rollModDrop(ownedModSet(u));
-    if (!id) fail('You already own every mod');
+    if (!id) fail('There are no more mods the crate can give you');
     u.profile.coins -= MOD_CRATE_PRICE;
     give(u, 'mod', id);
     save();

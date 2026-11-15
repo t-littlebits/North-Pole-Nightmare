@@ -185,9 +185,6 @@ create or replace function public.start_run(p_user uuid, p_character text, p_boo
 language plpgsql security definer set search_path = public as $$
 declare rid uuid; used text := null;
 begin
-  if not exists (select 1 from inventory where user_id = p_user and item_type = 'character' and item_id = p_character) then
-    raise exception 'character_locked';
-  end if;
   if p_boost is not null and p_boost <> '' then
     update profiles set boosts = jsonb_set(boosts, array[p_boost], to_jsonb((boosts->>p_boost)::int - 1))
       where id = p_user and coalesce((boosts->>p_boost)::int, 0) > 0;

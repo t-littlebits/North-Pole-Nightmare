@@ -35,7 +35,7 @@ export default function CollectionPage() {
     const t = TITLES.find((x) => x.mod === id);
     if (t) return `Earn the title "${t.name}"`;
     const d = ADVENT_REWARDS.find((r) => r.grants.some((g) => g.type === 'mod' && g.id === id));
-    return d ? `Advent calendar, day ${d.day}` : 'Presents or Mod Crates';
+    return d ? `Advent calendar, day ${d.day} (also from presents and crates)` : 'Presents or Mod Crates';
   };
   const stats = {
     ...(profile || {}), advent_claims: claims.length,
@@ -109,10 +109,10 @@ export default function CollectionPage() {
 
       {tab === 'Mods' && (
         <>
-          <p className="muted">Each weapon has {MAX_SLOTS} mod slots. Mods change how a weapon behaves (knockbacks, slows, bounces, echoes...) but never add damage, attack speed or XP. Earn them from titles and the advent calendar, find them in mystery presents (about {Math.round(PRESENT_MOD_RATE * 100)}% each, revealed after your run), or open a crate.</p>
+          <p className="muted">Each weapon has {MAX_SLOTS} mod slots. Mods change how a weapon behaves (knockbacks, slows, bounces, echoes...) but never add damage, attack speed or XP. Earn most of them from titles. The rest come from the advent calendar, and those can also turn up in mystery presents (about {Math.round(PRESENT_MOD_RATE * 100)}% each, revealed after your run) or a crate. Mods that a title can award are never found by luck.</p>
           <div className="panel row">
             <button className="btn" onClick={openCrate}>Open a Mod Crate · 🪙 {MOD_CRATE_PRICE}</button>
-            <span className="muted">A random mod you do not own yet.</span>
+            <span className="muted">A random mod you do not own yet (never one that a title awards).</span>
           </div>
           {Object.values(WEAPONS).filter((w) => owns('weapon', w.id)).map((w) => {
             const eq = loadout[w.id] || [];

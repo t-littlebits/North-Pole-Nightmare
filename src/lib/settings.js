@@ -1,6 +1,6 @@
 // Player settings, persisted locally (and mirrored to the account when online).
 const KEY = 'npn.settings.v1';
-export const DEFAULT_SETTINGS = { music: true, sfx: true, volume: 0.6, snow: true, shake: true, touch: 'auto', showFps: false };
+export const DEFAULT_SETTINGS = { music: true, sfx: true, volume: 0.6, snow: true, shake: true, touch: 'auto', showFps: false, mouseAim: false };
 
 let cache = null;
 const subs = new Set();

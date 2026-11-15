@@ -94,6 +94,15 @@ export default class GameScene extends Phaser.Scene {
     this.keys = this.input.keyboard.addKeys({ up: 'W', left: 'A', down: 'S', right: 'D', space: 'SPACE', p: 'P', esc: 'ESC' });
     this.cursors = this.input.keyboard.createCursorKeys();
     this.setupTouch();
+    // Optional mouse aiming (desktop). Falls back to auto-aim until a real mouse is seen, so touch screens are unaffected.
+    this.mouseAim = !!this.settings.mouseAim;
+    this.mouseSeen = false;
+    this.cross = this.add.image(0, 0, 'crosshair').setDepth(5500).setVisible(false);
+    if (this.mouseAim) {
+      this.input.setDefaultCursor('crosshair');
+      this.input.on('pointermove', (p) => { if (!p.wasTouch) this.mouseSeen = true; });
+      this.input.on('pointerdown', (p) => { if (!p.wasTouch) this.mouseSeen = true; });
+    }
 
     // ---- collisions ----
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, null, this);
@@ -196,6 +205,7 @@ export default class GameScene extends Phaser.Scene {
     this.runMs += delta;
 
     this.updatePlayer(dt);
+    this.updateCrosshair();
     this.updateWeapons(delta, dt);
     this.updateEnemies(dt);
     this.updateBullets(dt);
@@ -396,10 +406,14 @@ export default class GameScene extends Phaser.Scene {
   }
 
   fire_snowball(lvl) {
-    const t = this.nearestEnemy();
-    if (!t) return false;
+    let base;
+    if (this.aiming()) base = this.aimAngle();
+    else {
+      const t = this.nearestEnemy();
+      if (!t) return false;
+      base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
+    }
     const count = 1 + Math.floor((lvl - 1) / 2) + this.stats.proj;
-    const base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
     const seek = this.hasMod('snowball', 'seeker');
     for (let i = 0; i < count; i++) {
       this.spawnSnowball(this.player.x, this.player.y, base + (i - (count - 1) / 2) * 0.18, 8 + 3 * (lvl - 1), { pierce: lvl >= 4 ? 1 : 0, seek });
@@ -409,10 +423,14 @@ export default class GameScene extends Phaser.Scene {
   }
 
   fire_candycane(lvl) {
-    const t = this.nearestEnemy(600);
-    if (!t) return false;
+    let base;
+    if (this.aiming()) base = this.aimAngle();
+    else {
+      const t = this.nearestEnemy(600);
+      if (!t) return false;
+      base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
+    }
     const count = 1 + Math.floor((lvl - 1) / 3) + Math.floor(this.stats.proj / 2);
-    const base = Math.atan2(t.y - this.player.y, t.x - this.player.x);
     for (let i = 0; i < count; i++) {
       const a = base + (i - (count - 1) / 2) * 0.5;
       const b = this.bullets.create(this.player.x, this.player.y, 'w_candycane');
@@ -456,12 +474,18 @@ export default class GameScene extends Phaser.Scene {
 
   fire_bomb(lvl) {
     const count = 1 + Math.floor((lvl - 1) / 3) + Math.floor(this.stats.proj / 2);
-    const pool = this.enemies.getChildren().filter((e) => e.active && !e.dead && Math.hypot(e.x - this.player.x, e.y - this.player.y) < 460);
-    if (!pool.length) return false;
-    for (let i = 0; i < count; i++) {
-      const t = Phaser.Utils.Array.GetRandom(pool);
-      const bomb = this.add.image(this.player.x, this.player.y, 'w_bomb').setScale(1.5).setDepth(3000);
-      const tx = t.x, ty = t.y;
+    const px = this.player.x, py = this.player.y;
+    const targets = [];
+    if (this.aiming()) {
+      const a = this.aimPoint(), dx = a.x - px, dy = a.y - py, d = Math.hypot(dx, dy) || 1, k = Math.min(1, 460 / d);
+      for (let i = 0; i < count; i++) targets.push({ x: px + dx * k + (i ? Phaser.Math.Between(-50, 50) : 0), y: py + dy * k + (i ? Phaser.Math.Between(-50, 50) : 0) });
+    } else {
+      const pool = this.enemies.getChildren().filter((e) => e.active && !e.dead && Math.hypot(e.x - px, e.y - py) < 460);
+      if (!pool.length) return false;
+      for (let i = 0; i < count; i++) { const t = Phaser.Utils.Array.GetRandom(pool); targets.push({ x: t.x, y: t.y }); }
+    }
+    for (const { x: tx, y: ty } of targets) {
+      const bomb = this.add.image(px, py, 'w_bomb').setScale(1.5).setDepth(3000);
       this.tweens.add({
         targets: bomb, x: tx, y: ty, duration: 520, ease: 'Sine.easeOut',
         onUpdate: (tw) => bomb.setAngle(tw.progress * 540),
@@ -594,7 +618,8 @@ export default class GameScene extends Phaser.Scene {
     const cd = ab.cd * 1000 * (1 - this.stats.cdr);
     this.sp.cd = cd; this.sp.max = cd;
     sfx('special');
-    const px = this.player.x, py = this.player.y, f = this.facing;
+    const px = this.player.x, py = this.player.y;
+    const f = this.aiming() ? { x: Math.cos(this.aimAngle()), y: Math.sin(this.aimAngle()) } : this.facing;
     switch (ab.id) {
       case 'sackslam': {
         const r = 200;
@@ -929,6 +954,25 @@ export default class GameScene extends Phaser.Scene {
   // Mods, timed effects, hazards
   // =====================================================================
   hasMod(w, id) { return (this.mods[w] || []).includes(id); }
+
+  // ---- mouse aiming ----
+  aiming() { return this.mouseAim && this.mouseSeen; }
+
+  aimPoint() {
+    const c = this.cameras.main, p = this.input.activePointer;
+    return { x: p.x + c.scrollX, y: p.y + c.scrollY };
+  }
+
+  aimAngle() {
+    const a = this.aimPoint();
+    return Math.atan2(a.y - this.player.y, a.x - this.player.x);
+  }
+
+  updateCrosshair() {
+    const on = this.aiming();
+    this.cross.setVisible(on);
+    if (on) { const a = this.aimPoint(); this.cross.setPosition(a.x, a.y); }
+  }
 
   /** Proc effects from equipped mods. These never add damage; they only move, slow or stun enemies. */
   weaponProc(w, e, ox, oy) {

@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { backend, isDemo } from './backend/index.js';
 import { getSettings, saveSettings, subscribeSettings } from './settings.js';
-import { DEFAULT_WEAPONS, defaultSkinFor, CHARACTER_IDS } from '../data/catalog.js';
+import { DEFAULT_WEAPONS, defaultSkinFor, CHARACTER_IDS } from '../data/catalog.js';   // heroes and weapons are free for everyone
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
 
 const FREE = new Set([
-  'character:santa', 'character:elf',
+  ...CHARACTER_IDS.map((c) => `character:${c}`),
   ...DEFAULT_WEAPONS.map((w) => `weapon:${w}`),
   ...CHARACTER_IDS.map((c) => `skin:${defaultSkinFor(c)}`)
 ]);

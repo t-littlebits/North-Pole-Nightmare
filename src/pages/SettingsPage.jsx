@@ -25,6 +25,7 @@ export default function SettingsPage() {
         <h2>Display and controls</h2>
         {Toggle({ k: 'snow', label: 'Snowfall', hint: 'On the website and in the arena. Turn off for a calmer screen.' })}
         {Toggle({ k: 'shake', label: 'Screen shake' })}
+        {Toggle({ k: 'mouseAim', label: 'Aim attacks with the mouse', hint: 'Snowballs, candy canes and bombs fire toward your cursor instead of the nearest enemy, and dashes follow it. Desktop only: touch screens always auto-aim.' })}
         <label className="slider">Touch controls
           <select value={settings.touch} onChange={(e) => setSetting({ touch: e.target.value })}>
             <option value="auto">Automatic (show on touch screens)</option><option value="on">Always show</option><option value="off">Never show</option>

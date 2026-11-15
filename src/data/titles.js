@@ -20,7 +20,7 @@ export const TITLES = [
   { id: 'long_night', name: 'Long Night Survivor', rarity: 'rare', desc: 'Survive 1 hour in total.', stat: 'total_seconds', target: 3600, mod: 'counter' },
   { id: 'advent_devotee', name: 'Advent Devotee', rarity: 'rare', desc: 'Claim 12 advent doors.', stat: 'advent_claims', target: 12 },
   { id: 'calendar_complete', name: 'Calendar Completionist', rarity: 'epic', desc: 'Claim all 24 doors of an advent calendar.', stat: 'advent_claims', target: 24 },
-  { id: 'full_sleigh', name: 'Full Sleigh Team', rarity: 'epic', desc: 'Unlock all five heroes.', stat: 'heroes_owned', target: 5 },
+  { id: 'full_sleigh', name: 'Sleigh Rider', rarity: 'epic', desc: 'Reach wave 15.', stat: 'best_wave', target: 15 },
   { id: 'fashionista', name: 'Fashionista', rarity: 'rare', desc: 'Own 10 skins.', stat: 'skins_owned', target: 10 },
   { id: 'founder', name: 'Founder', rarity: 'epic', desc: 'Played in the earliest days. Granted by hand.', manual: true },
   { id: 'owner', name: 'Owner', rarity: 'owner', desc: 'Built this place. Granted by hand.', manual: true }

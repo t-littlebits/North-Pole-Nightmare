@@ -16,17 +16,17 @@ export const CHARACTERS = {
     ability: { id: 'jingledash', name: 'Jingle Dash', cd: 5, desc: 'A quick invulnerable dash that damages enemies you pass through.' }
   },
   snowman: {
-    id: 'snowman', name: 'Snowman', hp: 160, speed: 120, weapon: 'iceblast', price: 500,
+    id: 'snowman', name: 'Snowman', hp: 160, speed: 120, weapon: 'iceblast', price: 0,
     blurb: 'Slow, huge health pool, and utterly unbothered by the cold.',
     ability: { id: 'blizzardstorm', name: 'Blizzard Storm', cd: 16, desc: 'Summons a roaring storm around you for 5 seconds that slows and shreds enemies, then shatters in a freezing burst.' }
   },
   reindeer: {
-    id: 'reindeer', name: 'Reindeer', hp: 100, speed: 170, weapon: 'bells', price: 800,
+    id: 'reindeer', name: 'Reindeer', hp: 100, speed: 170, weapon: 'bells', price: 0,
     blurb: 'Jingles constantly. Enemies hear it coming, and that is the plan.',
     ability: { id: 'rednosebeam', name: 'Red Nose Beam', cd: 12, desc: 'Your nose blazes into a sweeping beam that spins around you for 3 seconds, burning everything it touches.' }
   },
   knight: {
-    id: 'knight', name: 'Gingerbread Knight', hp: 140, speed: 135, weapon: 'bomb', price: 1200,
+    id: 'knight', name: 'Gingerbread Knight', hp: 140, speed: 135, weapon: 'bomb', price: 0,
     blurb: 'Baked for battle. Armoured in icing, armed with explosives.',
     ability: { id: 'garrison', name: 'Gingerbread Garrison', cd: 14, desc: 'Bakes three cookie soldiers that hunt down enemies for 8 seconds.' }
   }
@@ -37,10 +37,10 @@ export const WEAPONS = {
   snowball: { id: 'snowball', name: 'Snowballs', price: 0, blurb: 'Fires at the nearest enemy. Extra snowballs at higher levels.' },
   candycane: { id: 'candycane', name: 'Candy Canes', price: 0, blurb: 'Boomerang canes that pierce everything on the way out and back.' },
   iceblast: { id: 'iceblast', name: 'Ice Blast', price: 0, blurb: 'Frost nova around you that damages and slows.' },
-  bells: { id: 'bells', name: 'Christmas Bells', price: 600, blurb: 'Golden bells orbit you and ring enemies up on contact.' },
-  bomb: { id: 'bomb', name: 'Gingerbread Bombs', price: 900, blurb: 'Lobbed at enemies, explode after a short fuse.' }
+  bells: { id: 'bells', name: 'Christmas Bells', price: 0, blurb: 'Golden bells orbit you and ring enemies up on contact.' },
+  bomb: { id: 'bomb', name: 'Gingerbread Bombs', price: 0, blurb: 'Lobbed at enemies, explode after a short fuse.' }
 };
-export const DEFAULT_WEAPONS = ['snowball', 'candycane', 'iceblast'];
+export const DEFAULT_WEAPONS = ['snowball', 'candycane', 'iceblast', 'bells', 'bomb'];   // every weapon is free
 
 // Palette overrides are keyed by the single-letter palette keys used in src/game/sprites.js
 export const SKINS = {
