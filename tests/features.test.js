@@ -19,7 +19,8 @@ const modsData = await import('../src/data/mods.js');
 const { MODS, MOD_LIST, MAX_SLOTS, canEquip, sanitizeLoadout, rollPresentMods, rollModDrop, MOD_CRATE_PRICE, ACHIEVEMENT_MODS } = modsData;
 const { saveSettings } = await import('../src/lib/settings.js');
 const { SPRITES } = await import('../src/game/sprites.js');
-const { WEAPONS, CHARACTER_IDS } = await import('../src/data/catalog.js');
+const { WEAPONS, CHARACTER_IDS, ENEMIES, MAX_POINTS_PER_KILL } = await import('../src/data/catalog.js');
+const { enemyHpScale, enemyDmgScale } = await import('../src/shared/rules.js');
 const { ADVENT_REWARDS } = await import('../src/data/advent.js');
 const { BOSSES, CHARACTERS } = await import('../src/data/catalog.js');
 const { rollUpgrades, applyUpgrade } = await import('../src/data/upgrades.js');
@@ -435,4 +436,89 @@ test('mouse aim: attacks follow the cursor; off by default; auto-aim until a mou
     assert.ok(el.dash.vx < 0 && Math.abs(el.dash.vy) < 1, 'jingle dash goes toward the cursor');
     drive(s, 5, { pull: false });  // keeps running with the crosshair on
   } finally { saveSettings({ mouseAim: false }); }
+});
+
+// ---------------- balance ----------------
+test('balance: enemy health outpaces the old curve and keeps growing', () => {
+  const old = (w) => 1 + (w - 1) * 0.16 + Math.pow(w, 1.3) * 0.02;
+  for (let w = 2; w <= 40; w++) { assert.ok(enemyHpScale(w) > old(w), `wave ${w}`); assert.ok(enemyHpScale(w) > enemyHpScale(w - 1)); }
+  assert.ok(enemyHpScale(20) > 6.5 && enemyDmgScale(10) > 1.5);
+  const s = make('santa'); s.run.wave = 12;
+  const e = s.spawnEnemy('snowman', 100, 100);
+  assert.ok(Math.abs(e.maxHp - ENEMIES.snowman.hp * enemyHpScale(12)) < 1e-6);
+});
+
+test('balance: every enemy (even elite) stays inside the per-kill score limit the server checks', () => {
+  for (const d of Object.values(ENEMIES)) assert.ok(d.pts * 3 <= MAX_POINTS_PER_KILL, d.id);
+});
+
+test('balance: bells no longer knock enemies away or grow past four bells', () => {
+  const s = make('santa');
+  s.weapons = { bells: 8 };
+  const e = s.spawnEnemy('snowman', s.player.x + 10, s.player.y);
+  for (let i = 0; i < 120; i++) { s.t += 16; s.runMs += 16; s.updateBells(0.016); e.x = s.bells[0].x; e.y = s.bells[0].y; }
+  assert.equal(s.bells.length, 4, 'four bells at level 8');
+  assert.ok(!e.kUntil, 'no knockback from the bells themselves');
+  assert.ok(e.hp < e.maxHp, 'but they still hurt');
+  const chime = make('santa', { loadout: { bells: ['chime'] } });
+  chime.weapons = { bells: 8 };
+  const far = chime.spawnEnemy('snowman', chime.player.x + 60, chime.player.y);
+  chime.runMs = 5000; chime.updateBells(0.016);
+  assert.ok(far.kUntil > chime.runMs, 'the Chime Wave mod is now the only bell knockback');
+});
+
+test('balance: armor and regeneration are capped, level-up heal is small', () => {
+  const stats = { maxHp: 100, hp: 100, speed: 100, atk: 1, dmg: 1, pickup: 60, regen: 0, crit: 0, xpMult: 1, armor: 0, cdr: 0, proj: 0, luck: 0 };
+  for (let i = 0; i < 30; i++) { applyUpgrade({ kind: 'stat', id: 'armor', mult: 4 }, stats, {}); applyUpgrade({ kind: 'stat', id: 'regen', mult: 4 }, stats, {}); }
+  assert.equal(stats.armor, 8); assert.equal(stats.regen, 5);
+  const s = make('santa'); s.stats.hp = 50;
+  s.startLevelUp(); s.chooseUpgrade(0);
+  assert.ok(Math.abs(s.stats.hp - (50 + s.stats.maxHp * 0.05)) < 1e-6 || s.stats.hp <= 50 + s.stats.maxHp * 0.1 + 12);
+});
+
+// ---------------- ranged enemy ----------------
+test('nutcracker gunner: keeps its distance, retreats when crowded, and only shoots on screen', () => {
+  const s = make('santa');
+  const px = s.player.x, py = s.player.y;
+  const far = s.spawnEnemy('nutcracker', px + 900, py);          // far off screen
+  drive(s, 3, { pull: false });
+  assert.equal(s.eshots.getLength(), 0, 'no shots from off-screen enemies');
+  assert.ok(far.body.velocity.x < 0, 'it walks toward the player');
+  far.destroy();
+
+  const close = s.spawnEnemy('nutcracker', px + 120, py);        // too close: backs away
+  s.update(s.t + 16, 16);
+  assert.ok(close.body.velocity.x > 0, 'retreats from a crowding player');
+  close.destroy();
+
+  const mid = s.spawnEnemy('nutcracker', px + 280, py);          // comfortable range: strafes and shoots
+  mid.nextFire = 0;
+  s.stats.maxHp = s.stats.hp = 100000;                           // survive the shots so we can count them
+  s.update(s.t + 16, 16);
+  assert.ok(mid.fireWind > 0, 'telegraphs with a flash first');
+  drive(s, 1, { pull: false });
+  assert.ok(s.eshots.getLength() > 0 || s.stats.hp < 100000, 'then fires at the player');
+  const shot = s.eshots.getChildren()[0];
+  if (shot) assert.ok(shot.body.velocity.x < 0, 'aimed at the player');
+});
+
+test('nutcracker gunners appear from wave 4 and fire more shots later', () => {
+  const s = make('santa');
+  const seenEarly = new Set(); s.run.wave = 3; for (let i = 0; i < 600; i++) seenEarly.add(s.pickType());
+  assert.ok(!seenEarly.has('nutcracker'));
+  const seenLate = new Set(); s.run.wave = 6; for (let i = 0; i < 600; i++) seenLate.add(s.pickType());
+  assert.ok(seenLate.has('nutcracker'));
+  const e = s.spawnEnemy('nutcracker', s.player.x + 280, s.player.y);
+  for (const [wave, n] of [[5, 1], [9, 2], [14, 3]]) {
+    s.run.wave = wave; s.eshots.getChildren().slice().forEach((b) => b.destroy());
+    s.shooterFire(e);
+    assert.equal(s.eshots.getLength(), n, `wave ${wave} fires ${n}`);
+  }
+});
+
+test('a long mixed run with the new enemy still validates server-side', () => {
+  const s = make('santa');
+  drive(s, 150);
+  const stats = { killPoints: s.run.killPoints, kills: s.run.kills, bosses: s.run.bosses, wave: s.run.wave, seconds: Math.floor(s.runMs / 1000), presents: s.run.presents };
+  assert.ok(validateRun(stats, stats.seconds + 2).ok);
 });
