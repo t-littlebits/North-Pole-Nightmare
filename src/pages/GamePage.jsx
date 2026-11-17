@@ -9,11 +9,10 @@ import { startMusic, stopMusic, sfx } from '../game/audio.js';
 import { CHARACTERS, CHARACTER_IDS, SKINS, WEAPONS, BOOSTS, RARITIES } from '../data/catalog.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
 import TitleTag from '../components/TitleTag.jsx';
-import { ARENAS, ARENA_IDS, randomArena } from '../data/arenas.js';
+import { ARENAS, randomArena } from '../data/arenas.js';
 import { MODS } from '../data/mods.js';
 import { TITLE_BY_ID } from '../data/titles.js';
 
-const SWATCH = { village: '#e6f2fb', lake: '#b9e0f3', candy: '#fde9f1', workshop: '#8a5a2b' };
 
 export default function GamePage() {
   const app = useApp();
@@ -126,9 +125,10 @@ function Playing({ cfg, onOver, onQuit }) {
   const [banner, setBanner] = useState(null);
 
   useEffect(() => {
-    let game = null, dead = false, bannerTimer = 0;
+    let game = null, dead = false, bannerTimer = 0, bossLive = false;
     const offs = [
-      bus.on('hud', setHud), bus.on('levelup', setLevelup), bus.on('paused', setPaused), bus.on('boss', setBoss),
+      bus.on('hud', setHud), bus.on('levelup', setLevelup), bus.on('paused', setPaused), bus.on('boss', (b) => { if (b && !bossLive) { bossLive = true; setBanner({ text: b.name, boss: true }); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => setBanner(null), 2800); } if (!b) bossLive = false; setBoss(b); }),
+      bus.on('bossdefeated', () => { setBanner({ text: 'BOSS DEFEATED!' }); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => setBanner(null), 2600); }),
       bus.on('wave', (w) => { setBanner(w); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => setBanner(null), 2200); }),
       bus.on('bossphase', () => { setBanner({ text: 'PHASE 2!', boss: true }); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => setBanner(null), 2200); }),
       bus.on('gameover', (r) => overRef.current(r))
@@ -166,7 +166,7 @@ function Playing({ cfg, onOver, onQuit }) {
               </div>
               <div className="readout">
                 <b>{hud.score.toLocaleString()}</b>
-                <span>Wave {hud.wave} · {hud.waveLeft}s</span>
+                <span>{hud.bossFight ? 'BOSS FIGHT' : `Wave ${hud.wave} · ${hud.waveLeft}s`}</span>
                 <span>{hud.kills} kills · {formatTime(hud.time)}</span>
               </div>
               <div className="hud-buttons">

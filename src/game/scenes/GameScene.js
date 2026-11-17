@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { CHARACTERS, ENEMIES, BOSSES, WAVE_SECONDS, DEFAULT_WEAPONS } from '../../data/catalog.js';
 import { rollUpgrades, applyUpgrade } from '../../data/upgrades.js';
-import { ENEMY_CAP, spawnInterval, spawnCount, computeScore } from '../../shared/rules.js';
+import { ENEMY_CAP, spawnInterval, spawnCount, computeScore, enemyHpScale, enemyDmgScale } from '../../shared/rules.js';
 import { ARENAS } from '../../data/arenas.js';
 import { sanitizeLoadout } from '../../data/mods.js';
 import { buildTextures } from '../textures.js';
 import { bus } from '../bus.js';
-import { sfx } from '../audio.js';
+import { sfx, setMusicMode } from '../audio.js';
 import { getSettings } from '../../lib/settings.js';
 
 export const VIEW_W = 960;
@@ -15,6 +15,12 @@ const WORLD_W = 2400;
 const WORLD_H = 1800;
 const FONT = '"Press Start 2P", monospace';
 const xpNeeded = (lvl) => Math.floor(5 + lvl * 3 + lvl * lvl * 0.5);
+
+// Red Nose Beam: reaches past the screen edge and whips around exactly twice.
+const BEAM_LEN = 1300;
+const BEAM_SPEED = 6.4;   // radians per second (double the old 3.2)
+const BEAM_TURNS = 2;
+const BOSS_ENRAGE_MS = 90000;   // if a boss fight drags on this long, waves start up again
 
 // weapon cooldowns (ms) by level
 const COOLDOWN = {
@@ -87,6 +93,8 @@ export default class GameScene extends Phaser.Scene {
     this.ended = false;
     this.hudAcc = 0;
     this.boss = null;
+    this.bossFightMs = 0;
+    this.bossTint = this.add.rectangle(VIEW_W / 2, VIEW_H / 2, VIEW_W, VIEW_H, 0x7a0010, 0).setScrollFactor(0).setDepth(4400);
     this.popCount = 0;
     this.cards = [];
 
@@ -288,6 +296,11 @@ export default class GameScene extends Phaser.Scene {
       this.boss = null;
       bus.emit('boss', null);
       sfx('boom');
+      this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.4);
+      this.popText(this.player.x, this.player.y - 50, 'BOSS DEFEATED!', '#ffd166');
+      bus.emit('bossdefeated', { name: e.bossDef?.name });
+      setMusicMode('normal');
+      this.clearLesserEnemies();
     } else {
       this.run.killPoints += def.pts * (e.elite ? 3 : 1);
       this.dropGem(e.x, e.y, def.xp * (e.elite ? 4 : 1));
@@ -532,12 +545,12 @@ export default class GameScene extends Phaser.Scene {
 
   updateBells(dt) {
     const lvl = this.weapons.bells;
-    const count = 2 + Math.floor((lvl - 1) / 2) + Math.floor(this.stats.proj / 2);
+    const count = 2 + Math.floor((lvl - 1) / 3) + Math.floor(this.stats.proj / 2);
     while (this.bells.length < count) this.bells.push(this.add.image(0, 0, 'w_bells').setScale(1.8));
     while (this.bells.length > count) this.bells.pop().destroy();
     const radius = 66 + 5 * lvl;
     this.bellAngle += (2.6 + 0.2 * lvl) * dt * Math.min(1.8, 0.7 + 0.3 * this.stats.atk);
-    const dmg = 7 + 2.5 * lvl;
+    const dmg = 6 + 2 * lvl;
     const counter = this.hasMod('bells', 'counter');
     this.bells.forEach((b, i) => {
       const a = (counter && i % 2 ? -this.bellAngle : this.bellAngle) + (i * Math.PI * 2) / count;
@@ -547,9 +560,7 @@ export default class GameScene extends Phaser.Scene {
         if (this.runMs < (e.bellUntil || 0)) continue;
         const reach = 20 + (e.boss ? 40 : 10);
         if (Math.abs(e.x - b.x) < reach && Math.abs(e.y - b.y) < reach) {
-          e.bellUntil = this.runMs + 450;
-          const d = Math.hypot(e.x - this.player.x, e.y - this.player.y) || 1;
-          this.knock(e, (e.x - this.player.x) / d, (e.y - this.player.y) / d, 160, 120);
+          e.bellUntil = this.runMs + 600;
           this.damageEnemy(e, this.dmgOf(dmg));
           this.weaponProc('bells', e);
         }
@@ -643,7 +654,11 @@ export default class GameScene extends Phaser.Scene {
         this.popText(px, py - 30, 'BLIZZARD', '#99ddff');
         break;
       case 'rednosebeam':
-        this.beam = { until: this.runMs + 3000, angle: Math.atan2(f.y, f.x), next: 0, sprite: this.add.rectangle(px, py, 340, 22, 0xff3b3b, 0.7).setOrigin(0, 0.5).setDepth(3400) };
+        this.beam = {
+          angle: Math.atan2(f.y, f.x), swept: 0, until: this.runMs + 3500,
+          sprite: this.add.rectangle(px, py, BEAM_LEN, 22, 0xff3b3b, 0.75).setOrigin(0, 0.5).setDepth(3400),
+          glow: this.add.rectangle(px, py, BEAM_LEN, 46, 0xff8a8a, 0.25).setOrigin(0, 0.5).setDepth(3399)
+        };
         break;
       case 'garrison':
         for (let i = 0; i < 3; i++) {
@@ -674,7 +689,26 @@ export default class GameScene extends Phaser.Scene {
   // =====================================================================
   // Enemies, waves and bosses
   // =====================================================================
+  bossFight() { return !!(this.boss && this.boss.active) && this.bossFightMs < BOSS_ENRAGE_MS; }
+
+  /** Lesser enemies vanish (their XP is paid out as gems, but no kill credit) so the boss is the only thing to fight. */
+  clearLesserEnemies() {
+    let xp = 0;
+    for (const e of this.enemies.getChildren().slice()) {
+      if (!e.active || e.dead || e.boss) continue;
+      xp += e.def.xp * (e.elite ? 4 : 1);
+      this.burst(e.x, e.y, 0xb050ff, 2);
+      e.destroy();
+    }
+    this.eshots.getChildren().slice().forEach((b) => b.destroy());
+    const chunks = Math.min(10, Math.ceil(xp / 5));
+    for (let i = 0; i < chunks; i++) this.dropGem(this.player.x + Phaser.Math.Between(-90, 90), this.player.y + Phaser.Math.Between(-90, 90), xp / chunks);
+    this.ring(this.player.x, this.player.y, 900, 0xb050ff);
+  }
+
   updateSpawns(delta) {
+    if (this.boss && this.boss.active) this.bossFightMs += delta; else this.bossFightMs = 0;
+    if (this.bossFight()) return;   // no new waves and no new regular enemies while the boss is alive
     this.waveMs += delta;
     if (this.waveMs >= WAVE_SECONDS * 1000) {
       this.waveMs -= WAVE_SECONDS * 1000;
@@ -682,7 +716,7 @@ export default class GameScene extends Phaser.Scene {
       sfx('wave');
       const isBoss = this.run.wave % 5 === 0;
       bus.emit('wave', { wave: this.run.wave, boss: isBoss });
-      if (isBoss) this.spawnBoss();
+      if (isBoss && !(this.boss && this.boss.active)) { this.spawnBoss(); return; }
     }
     this.spawnAcc += delta;
     const iv = spawnInterval(this.run.wave);
@@ -716,9 +750,10 @@ export default class GameScene extends Phaser.Scene {
     const w = this.run.wave;
     const e = this.enemies.create(x, y, `e_${type}`);
     e.def = def; e.ai = def.ai; e.elite = !!opts.elite; e.boss = false;
-    e.maxHp = e.hp = def.hp * (1 + (w - 1) * 0.16 + Math.pow(w, 1.3) * 0.02) * (e.elite ? 3 : 1);
+    e.maxHp = e.hp = def.hp * enemyHpScale(w) * (e.elite ? 3 : 1);
     e.spd = def.speed * (1 + Math.min(0.5, (w - 1) * 0.012)) * (e.elite ? 1.1 : 1);
-    e.dmgVal = def.dmg * (1 + (w - 1) * 0.04) * (e.elite ? 1.3 : 1);
+    e.dmgVal = def.dmg * enemyDmgScale(w) * (e.elite ? 1.3 : 1);
+    e.nextFire = this.runMs + 1200 + Math.random() * 1500; e.fireWind = 0;
     e.phase = Math.random() * 6;
     e.nextCharge = this.runMs + 1500 + Math.random() * 2000;
     e.frozenUntil = 0; e.slowUntil = 0; e.kUntil = 0; e.hitFlash = 0; e.charge = null;
@@ -745,6 +780,10 @@ export default class GameScene extends Phaser.Scene {
     e.body.setSize(22, 24);
     e.setScale(def.scale); e.baseTint = def.tint; e.setTint(def.tint);
     this.boss = e;
+    this.bossFightMs = 0;
+    this.spawnAcc = 0;
+    this.clearLesserEnemies();
+    setMusicMode('boss');
     sfx('boss');
     bus.emit('boss', { name: def.name, hp: e.hp, max: e.maxHp, phase: 1 });
     this.cameras.main.flash(400, 255, 60, 60);
@@ -779,6 +818,19 @@ export default class GameScene extends Phaser.Scene {
         const ghostly = (this.runMs + e.phase * 1000) % 4000 < 900;
         e.intangible = ghostly;
         e.setAlpha(ghostly ? 0.35 : 1);
+      } else if (e.ai === 'shooter') {
+        // Keeps its distance, backs away if you close in, and fires aimed shots (only while on screen).
+        let vx = 0, vy = 0;
+        if (dist > 340) { vx = nx; vy = ny; }
+        else if (dist < 210) { vx = -nx * 0.8; vy = -ny * 0.8; }
+        else { e.strafe ||= Math.random() < 0.5 ? 1 : -1; vx = -ny * e.strafe * 0.5; vy = nx * e.strafe * 0.5; }
+        e.setVelocity(vx * spd, vy * spd);
+        if (e.fireWind) {
+          if (this.runMs >= e.fireWind) { e.fireWind = 0; e.clearTint(); if (e.baseTint) e.setTint(e.baseTint); this.shooterFire(e); }
+        } else if (this.runMs >= e.nextFire && Math.abs(e.x - px) < 500 && Math.abs(e.y - py) < 290) {
+          e.fireWind = this.runMs + 300; e.setTintFill(0xffdd55);
+          e.nextFire = this.runMs + Math.max(1400, 2600 - this.run.wave * 45) * (e.elite ? 0.7 : 1);
+        }
       } else if (e.ai === 'charge') {
         if (e.charge === 'wind') {
           e.setVelocity(0, 0);
@@ -846,7 +898,7 @@ export default class GameScene extends Phaser.Scene {
   startLevelUp() {
     this.cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available });
     this.freeze(true);
-    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.1);
+    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.05);
     sfx('level');
     bus.emit('levelup', { level: this.run.level - this.pendingLevels + 1, cards: this.cards });
   }
@@ -1002,6 +1054,7 @@ export default class GameScene extends Phaser.Scene {
 
   updateEffects(delta, dt) {
     const px = this.player.x, py = this.player.y, now = this.runMs;
+    this.bossTint.setAlpha(this.bossFight() ? 0.1 + 0.04 * Math.sin(now / 300) : 0);
 
     if (this.delayed.length) {
       const due = this.delayed.filter((d) => d.at <= now);
@@ -1033,20 +1086,20 @@ export default class GameScene extends Phaser.Scene {
 
     const bm = this.beam;
     if (bm) {
-      bm.angle += 3.2 * dt;
-      bm.sprite.setPosition(px, py);
-      bm.sprite.rotation = bm.angle;
-      if (now >= bm.next) {
-        bm.next = now + 120;
-        const c = Math.cos(bm.angle), s = Math.sin(bm.angle);
-        for (const e of this.enemies.getChildren().slice()) {
-          if (!e.active || e.dead) continue;
-          const dx = e.x - px, dy = e.y - py;
-          const along = dx * c + dy * s, perp = Math.abs(-dx * s + dy * c);
-          if (along > -10 && along < 350 && perp < 18 + (e.boss ? 34 : 10)) this.damageEnemy(e, this.dmgOf(8));
-        }
+      // The beam moves fast, so test the whole arc swept this frame (not just where it ended up).
+      const a0 = bm.angle, step = BEAM_SPEED * dt;
+      bm.angle += step; bm.swept += step;
+      for (const part of [bm.sprite, bm.glow]) { part.setPosition(px, py); part.rotation = bm.angle; }
+      const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+      for (const e of this.enemies.getChildren().slice()) {
+        if (!e.active || e.dead || now < (e.beamUntil || 0)) continue;
+        const dx = e.x - px, dy = e.y - py, r = Math.hypot(dx, dy);
+        if (r > BEAM_LEN) continue;
+        const half = Math.atan2(18 + (e.boss ? 34 : 10), Math.max(r, 24));
+        const d0 = wrap(Math.atan2(dy, dx) - a0);
+        if (d0 + half >= 0 && d0 - half <= step) { e.beamUntil = now + 250; this.damageEnemy(e, this.dmgOf(18)); }
       }
-      if (now >= bm.until) { bm.sprite.destroy(); this.beam = null; }
+      if (bm.swept >= Math.PI * 2 * BEAM_TURNS || now >= bm.until) { bm.sprite.destroy(); bm.glow.destroy(); this.beam = null; }
     }
 
     for (let i = this.allies.length - 1; i >= 0; i--) {
@@ -1086,6 +1139,13 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
+  }
+
+  shooterFire(e) {
+    const a = Math.atan2(this.player.y - e.y, this.player.x - e.x);
+    const w = this.run.wave, n = w >= 14 ? 3 : w >= 9 ? 2 : 1;
+    for (let i = 0; i < n; i++) this.eshot(e.x, e.y, a + (i - (n - 1) / 2) * 0.22, 190, 7 + w * 0.45);
+    sfx('shoot');
   }
 
   // =====================================================================
@@ -1178,11 +1238,12 @@ export default class GameScene extends Phaser.Scene {
   bm_summon(e) {
     const t = e.bossDef.minion;
     if (!t) return;
-    const n = e.phase === 2 ? 4 : 3;
+    const alive = this.enemies.getChildren().filter((m) => m.minion && m.active && !m.dead).length;
+    const n = Math.min(e.phase === 2 ? 3 : 2, 6 - alive);   // a few adds at a time, never a swarm
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       const x = Phaser.Math.Clamp(e.x + Math.cos(a) * 90, 60, WORLD_W - 60), y = Phaser.Math.Clamp(e.y + Math.sin(a) * 90, 90, WORLD_H - 60);
-      this.spawnEnemy(t, x, y);
+      this.spawnEnemy(t, x, y).minion = true;
       this.burst(x, y, 0xb050ff, 4);
     }
   }
@@ -1226,7 +1287,7 @@ export default class GameScene extends Phaser.Scene {
       waveLeft: Math.max(0, Math.ceil((WAVE_SECONDS * 1000 - this.waveMs) / 1000)), kills: this.run.kills,
       score: computeScore({ killPoints: this.run.killPoints, bosses: this.run.bosses, wave: this.run.wave, seconds: this.runMs / 1000, presents: this.run.presents }),
       special: { cd: this.sp.cd, max: this.sp.max, name: this.ch.ability.name },
-      weapons: { ...this.weapons }, rage: this.runMs < this.rageUntil, time: Math.floor(this.runMs / 1000), force: !!force
+      weapons: { ...this.weapons }, bossFight: this.bossFight(), rage: this.runMs < this.rageUntil, time: Math.floor(this.runMs / 1000), force: !!force
     });
   }
 }

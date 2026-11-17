@@ -23,7 +23,7 @@ export const CHARACTERS = {
   reindeer: {
     id: 'reindeer', name: 'Reindeer', hp: 100, speed: 170, weapon: 'bells', price: 0,
     blurb: 'Jingles constantly. Enemies hear it coming, and that is the plan.',
-    ability: { id: 'rednosebeam', name: 'Red Nose Beam', cd: 12, desc: 'Your nose blazes into a sweeping beam that spins around you for 3 seconds, burning everything it touches.' }
+    ability: { id: 'rednosebeam', name: 'Red Nose Beam', cd: 12, desc: 'Your nose blazes into a screen-wide beam that whips around you twice in a couple of seconds, burning everything it touches.' }
   },
   knight: {
     id: 'knight', name: 'Gingerbread Knight', hp: 140, speed: 135, weapon: 'bomb', price: 0,
@@ -69,6 +69,7 @@ export const ENEMIES = {
   elf: { id: 'elf', name: 'Naughty Elf', hp: 12, speed: 98, dmg: 5, pts: 7, xp: 1, size: 26, ai: 'swarm', from: 1, weight: 6 },
   gingerbread: { id: 'gingerbread', name: 'Gingerbread Monster', hp: 26, speed: 64, dmg: 9, pts: 15, xp: 2, size: 30, ai: 'chase', from: 3, weight: 4 },
   reindeer: { id: 'reindeer', name: 'Evil Reindeer', hp: 40, speed: 70, dmg: 12, pts: 20, xp: 3, size: 32, ai: 'charge', from: 5, weight: 3 },
+  nutcracker: { id: 'nutcracker', name: 'Nutcracker Gunner', hp: 22, speed: 60, dmg: 6, pts: 20, xp: 3, size: 30, ai: 'shooter', from: 4, weight: 3 },
   ghost: { id: 'ghost', name: 'Christmas Ghost', hp: 20, speed: 72, dmg: 10, pts: 18, xp: 3, size: 30, ai: 'ghost', from: 7, weight: 3 }
 };
 export const MAX_POINTS_PER_KILL = 60; // elite reindeer: 20 * 3

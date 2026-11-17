@@ -64,20 +64,32 @@ const TUNE = [
   [E, 1], [E, 1], [E, 2], [E, 1], [E, 1], [E, 2], [E, 1], [G, 1], [C, 1.5], [D, 0.5], [E, 4],
   [F, 1], [F, 1], [F, 1.5], [F, 0.5], [F, 1], [E, 1], [E, 1], [E, 0.5], [E, 0.5], [G, 1], [G, 1], [F, 1], [D, 1], [C, 4], [A, 0]
 ];
+// A darker, faster riff replaces the jingle while a boss is alive.
+const BOSS_TUNE = [[110, 1], [110, 0.5], [130.81, 0.5], [110, 1], [164.81, 1], [155.56, 1], [110, 0.5], [110, 0.5], [130.81, 1], [196, 1], [185, 1], [110, 1]];
 let musicTimer = null;
 let musicOn = false;
+let musicMode = 'normal';
+let musicIndex = 0;
+export function setMusicMode(mode) {
+  if (mode === musicMode) return;
+  musicMode = mode;
+  musicIndex = 0;
+}
 
 export function startMusic() {
   if (musicOn || !getSettings().music) return;
   musicOn = true;
-  let i = 0;
-  const beat = 0.21;
+  musicMode = 'normal';
+  musicIndex = 0;
   const step = () => {
     if (!musicOn) return;
     if (!getSettings().music) { stopMusic(); return; }
-    const [f, len] = TUNE[i % TUNE.length];
-    if (len > 0) tone(f, len * beat * 0.9, 'triangle', 0.07);
-    i++;
+    const boss = musicMode === 'boss';
+    const tune = boss ? BOSS_TUNE : TUNE;
+    const beat = boss ? 0.15 : 0.21;
+    const [f, len] = tune[musicIndex % tune.length];
+    if (len > 0) tone(f, len * beat * 0.9, boss ? 'sawtooth' : 'triangle', boss ? 0.06 : 0.07);
+    musicIndex++;
     musicTimer = setTimeout(step, Math.max(1, len) * beat * 1000);
   };
   step();

@@ -20,6 +20,12 @@ export function maxSpawns(seconds) {
   return Math.ceil(total * 1.5) + 30; // slack for elites / rounding
 }
 
+// ---- Difficulty ----
+/** Enemy health multiplier by wave. Grows faster than before so late waves keep pace with a powered-up player. */
+export const enemyHpScale = (wave) => 1 + (wave - 1) * 0.18 + Math.pow(wave, 1.5) * 0.03;
+/** Contact damage multiplier by wave. */
+export const enemyDmgScale = (wave) => 1 + (wave - 1) * 0.06;
+
 // ---- Scoring ----
 export const computeScore = ({ killPoints, bosses, wave, seconds, presents }) =>
   killPoints + bosses * 500 + (wave - 1) * 100 + Math.floor(seconds) * 2 + presents * 25;
