@@ -10,7 +10,7 @@ export default function LeaderboardPage() {
   return (
     <div className="page">
       <h1>All-time leaderboard <span className="live" key={pulse}>● live</span></h1>
-      <p className="muted">{isDemo ? 'Demo mode: your scores are compared with practice rivals on this device.' : 'Updates the moment anyone sets a new best.'} Each player shows their single best run.</p>
+      <p className="muted">{isDemo ? 'Demo mode: your scores are compared with practice rivals on this device.' : ''} Each player shows their high score.</p>
       {error && <p className="error">{error}</p>}
       <div className="panel">
         <LeaderboardTable rows={rows} meId={user?.id} />
