@@ -30,7 +30,6 @@ export default function Layout() {
       </header>
       {isDemo && <div className="demo-banner">Demo mode: no Supabase keys found, so progress and scores are saved in this browser only.</div>}
       <main><Outlet /></main>
-      <footer className="foot">Made with pixels, peppermint and questionable reindeer decisions.</footer>
       <AuthModal />
       {toast && <div className={`toast ${toast.kind}`} role="status">{toast.msg}</div>}
     </div>
