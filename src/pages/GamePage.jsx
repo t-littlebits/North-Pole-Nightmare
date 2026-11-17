@@ -82,12 +82,6 @@ export default function GamePage() {
         })}
       </div>
 
-      <div className="panel arenas-info">
-        <h2>Random arena</h2>
-        <p className="muted">Every run is fought in a randomly chosen arena. They look different but play exactly the same.</p>
-        <div className="chips">{ARENA_IDS.map((id) => <span key={id} className="chip"><i className="swatch" style={{ background: SWATCH[id] }} />{ARENAS[id].name}</span>)}</div>
-      </div>
-
       <div className="panel">
         <h2>{CHARACTERS[character].ability.name}</h2>
         <p>{CHARACTERS[character].ability.desc} <span className="muted">Cooldown {CHARACTERS[character].ability.cd}s. Press Space (or the GO button on touch).</span></p>
@@ -162,7 +156,7 @@ function Playing({ cfg, onOver, onQuit }) {
     <div className="page game-page">
       <div className="game-frame" ref={frameRef}>
         <div className="game-host" ref={hostRef} />
-        {!hud && <div className="loading-cover">Hanging the lights…</div>}
+        {!hud && <div className="loading-cover">Loading…</div>}
         {hud && (
           <div className="hud" aria-live="off">
             <div className="hud-top">
