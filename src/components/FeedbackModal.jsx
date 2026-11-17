@@ -26,7 +26,7 @@ export default function FeedbackModal({ onClose }) {
     <div className="modal-back" onClick={onClose} role="presentation">
       <form className="panel modal feedback" onClick={(e) => e.stopPropagation()} onSubmit={submit} aria-label="Send feedback">
         <h2>Feedback &amp; suggestions</h2>
-        <p className="muted">Found a bug, or have an idea that would make the game better? Tell us.</p>
+        <p className="muted">Found a bug, or have an idea that would make the game better?</p>
         <div className="chips" role="radiogroup" aria-label="Type of feedback">
           {KINDS.map(([id, label]) => <button type="button" key={id} role="radio" aria-checked={kind === id} className={`chip ${kind === id ? 'on' : ''}`} onClick={() => setKind(id)}>{label}</button>)}
         </div>
