@@ -34,7 +34,7 @@ export default function SettingsPage() {
       </div>
       <div className="panel">
         <h2>Feedback</h2>
-        <p>Found a bug, or have an idea for the game? We read everything.</p>
+        <p>Found a bug, or have an idea for the game? I read everything.</p>
         <button className="btn" onClick={() => (!user && !isDemo ? setAuthOpen(true) : setFeedbackOpen(true))}>Send feedback or a suggestion</button>
         {!user && !isDemo && <p className="muted small-text">Sign in first. This keeps spam out.</p>}
       </div>
