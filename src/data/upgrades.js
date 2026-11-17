@@ -7,10 +7,10 @@ export const STAT_UPGRADES = [
   { id: 'atk', icon: '⚡', name: 'Sugar Rush', desc: (m) => `+${Math.round(8 * m)}% attack speed`, apply: (s, m) => { s.atk *= 1 + 0.08 * m; } },
   { id: 'dmg', icon: '⚔', name: 'Sharpened Icicles', desc: (m) => `+${Math.round(10 * m)}% damage`, apply: (s, m) => { s.dmg *= 1 + 0.1 * m; } },
   { id: 'pickup', icon: '🧲', name: 'Tinsel Magnet', desc: (m) => `+${Math.round(20 * m)}% pickup range`, apply: (s, m) => { s.pickup *= 1 + 0.2 * m; } },
-  { id: 'regen', icon: '☕', name: 'Hot Cocoa', desc: (m) => `+${(0.4 * m).toFixed(1)} HP regenerated per second`, apply: (s, m) => { s.regen = Math.min(5, s.regen + 0.4 * m); } },
+  { id: 'regen', icon: '☕', name: 'Hot Cocoa', desc: (m) => `+${(0.4 * m).toFixed(1)} HP regenerated per second`, apply: (s, m) => { s.regen += 0.4 * m; } },
   { id: 'crit', icon: '✦', name: 'Lucky Star', desc: (m) => `+${Math.round(5 * m)}% critical chance (double damage)`, apply: (s, m) => { s.crit = Math.min(0.9, s.crit + 0.05 * m); } },
   { id: 'xp', icon: '🎁', name: 'Wish List', desc: (m) => `+${Math.round(10 * m)}% XP gained`, apply: (s, m) => { s.xpMult += 0.1 * m; } },
-  { id: 'armor', icon: '🛡', name: 'Wool Scarf', desc: (m) => `Take ${(0.6 * m).toFixed(1)} less damage per hit`, apply: (s, m) => { s.armor = Math.min(8, s.armor + 0.6 * m); } },
+  { id: 'armor', icon: '🛡', name: 'Wool Scarf', desc: (m) => `Take ${(0.6 * m).toFixed(1)} less damage per hit`, apply: (s, m) => { s.armor += 0.6 * m; } },
   { id: 'cdr', icon: '⏳', name: 'Advent Candle', desc: (m) => `Special ability recharges ${Math.round(6 * m)}% faster`, apply: (s, m) => { s.cdr = Math.min(0.7, s.cdr + 0.06 * m); } },
   { id: 'luck', icon: '🍀', name: 'Holly Charm', desc: (m) => `Rarer upgrades appear more often (+${Math.round(10 * m)}% luck)`, apply: (s, m) => { s.luck += 0.1 * m; } },
   { id: 'proj', icon: '✚', name: 'Extra Ammo', minRarity: 'rare', desc: (m) => `+${m >= 4 ? 2 : 1} projectile for snowballs, canes and bombs`, apply: (s, m) => { s.proj += m >= 4 ? 2 : 1; } }

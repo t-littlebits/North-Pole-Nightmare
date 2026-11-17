@@ -36,10 +36,6 @@ const E_ELF = [
   '.......RRY..', '....RRRRRR..', '...RRRRRRR..', '..RRRRRRRR..', '..WWWWWWWW..', '.SSESSSSESS.',
   '.SSSSSSSSSS.', '..SSFSSFSS..', '..GGGGGGGG.L', '.SGGGBBGGGSL', '..GG....GG.H', '..BB....BB..'
 ];
-const E_NUTCRACKER = [
-  '.....Y......', '....KKKK....', '...KKKKKK...', '...KYYYYK...', '...SSSSSS...', '...SKSSKS...',
-  '...SWWWWS...', 'G.RRRYYRRR..', 'GGRRRRRRRR..', 'G.RRRYYRRR..', '..WW....WW..', '..KK....KK..'
-];
 const GHOST = [
   '....RRRRR...', '...RRRRRRRW.', '..WWWWWWWW..', '.WWWWWWWWWW.', '.WWKKWWKKWW.', '.WWKKWWKKWW.',
   '.WWWWKKWWWW.', '.WWWWKKWWWW.', '.WWWWWWWWWW.', '.WWWWWWWWWW.', '.WW.WWWW.WW.', '..W..WW..W..'
@@ -56,7 +52,6 @@ export const SPRITES = {
   e_elf: { rows: E_ELF, pal: { R: '#b3122e', Y: '#ffcf4a', W: '#ffffff', S: '#e8b896', E: '#ff2a2a', F: '#ffffff', G: '#1f6f4a', B: '#3b2a20', L: '#d6dde8', H: '#7a4a1a' } },
   e_gingerbread: { rows: E_GINGER, pal: { B: '#8a4b14', I: '#f3f3f3', K: '#1b1b2f', R: '#ff2a2a' } },
   e_reindeer: { rows: REINDEER, pal: { N: '#4a2f2a', D: '#1d1210', T: '#7a4a3a', A: '#e8e0c8', K: '#ff2a2a', R: '#ff0000' } },
-  e_nutcracker: { rows: E_NUTCRACKER, pal: { K: '#1b1b2f', Y: '#ffcf4a', S: '#e8b896', W: '#ffffff', R: '#b3122e', G: '#6b7280' } },
   e_ghost: { rows: GHOST, pal: { W: '#cfe9ff', K: '#12202e', R: '#d7263d' } }
 };
 

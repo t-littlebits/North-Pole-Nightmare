@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CHARACTERS, ENEMIES, BOSSES, WAVE_SECONDS, DEFAULT_WEAPONS } from '../../data/catalog.js';
 import { rollUpgrades, applyUpgrade } from '../../data/upgrades.js';
-import { ENEMY_CAP, spawnInterval, spawnCount, computeScore, enemyHpScale, enemyDmgScale } from '../../shared/rules.js';
+import { ENEMY_CAP, spawnInterval, spawnCount, computeScore } from '../../shared/rules.js';
 import { ARENAS } from '../../data/arenas.js';
 import { sanitizeLoadout } from '../../data/mods.js';
 import { buildTextures } from '../textures.js';
@@ -532,12 +532,12 @@ export default class GameScene extends Phaser.Scene {
 
   updateBells(dt) {
     const lvl = this.weapons.bells;
-    const count = 2 + Math.floor((lvl - 1) / 3) + Math.floor(this.stats.proj / 2);
+    const count = 2 + Math.floor((lvl - 1) / 2) + Math.floor(this.stats.proj / 2);
     while (this.bells.length < count) this.bells.push(this.add.image(0, 0, 'w_bells').setScale(1.8));
     while (this.bells.length > count) this.bells.pop().destroy();
     const radius = 66 + 5 * lvl;
     this.bellAngle += (2.6 + 0.2 * lvl) * dt * Math.min(1.8, 0.7 + 0.3 * this.stats.atk);
-    const dmg = 6 + 2 * lvl;
+    const dmg = 7 + 2.5 * lvl;
     const counter = this.hasMod('bells', 'counter');
     this.bells.forEach((b, i) => {
       const a = (counter && i % 2 ? -this.bellAngle : this.bellAngle) + (i * Math.PI * 2) / count;
@@ -547,7 +547,9 @@ export default class GameScene extends Phaser.Scene {
         if (this.runMs < (e.bellUntil || 0)) continue;
         const reach = 20 + (e.boss ? 40 : 10);
         if (Math.abs(e.x - b.x) < reach && Math.abs(e.y - b.y) < reach) {
-          e.bellUntil = this.runMs + 600;
+          e.bellUntil = this.runMs + 450;
+          const d = Math.hypot(e.x - this.player.x, e.y - this.player.y) || 1;
+          this.knock(e, (e.x - this.player.x) / d, (e.y - this.player.y) / d, 160, 120);
           this.damageEnemy(e, this.dmgOf(dmg));
           this.weaponProc('bells', e);
         }
@@ -714,10 +716,9 @@ export default class GameScene extends Phaser.Scene {
     const w = this.run.wave;
     const e = this.enemies.create(x, y, `e_${type}`);
     e.def = def; e.ai = def.ai; e.elite = !!opts.elite; e.boss = false;
-    e.maxHp = e.hp = def.hp * enemyHpScale(w) * (e.elite ? 3 : 1);
+    e.maxHp = e.hp = def.hp * (1 + (w - 1) * 0.16 + Math.pow(w, 1.3) * 0.02) * (e.elite ? 3 : 1);
     e.spd = def.speed * (1 + Math.min(0.5, (w - 1) * 0.012)) * (e.elite ? 1.1 : 1);
-    e.dmgVal = def.dmg * enemyDmgScale(w) * (e.elite ? 1.3 : 1);
-    e.nextFire = this.runMs + 1200 + Math.random() * 1500; e.fireWind = 0;
+    e.dmgVal = def.dmg * (1 + (w - 1) * 0.04) * (e.elite ? 1.3 : 1);
     e.phase = Math.random() * 6;
     e.nextCharge = this.runMs + 1500 + Math.random() * 2000;
     e.frozenUntil = 0; e.slowUntil = 0; e.kUntil = 0; e.hitFlash = 0; e.charge = null;
@@ -778,19 +779,6 @@ export default class GameScene extends Phaser.Scene {
         const ghostly = (this.runMs + e.phase * 1000) % 4000 < 900;
         e.intangible = ghostly;
         e.setAlpha(ghostly ? 0.35 : 1);
-      } else if (e.ai === 'shooter') {
-        // Keeps its distance, backs away if you close in, and fires aimed shots (only while on screen).
-        let vx = 0, vy = 0;
-        if (dist > 340) { vx = nx; vy = ny; }
-        else if (dist < 210) { vx = -nx * 0.8; vy = -ny * 0.8; }
-        else { e.strafe ||= Math.random() < 0.5 ? 1 : -1; vx = -ny * e.strafe * 0.5; vy = nx * e.strafe * 0.5; }
-        e.setVelocity(vx * spd, vy * spd);
-        if (e.fireWind) {
-          if (this.runMs >= e.fireWind) { e.fireWind = 0; e.clearTint(); if (e.baseTint) e.setTint(e.baseTint); this.shooterFire(e); }
-        } else if (this.runMs >= e.nextFire && Math.abs(e.x - px) < 500 && Math.abs(e.y - py) < 290) {
-          e.fireWind = this.runMs + 300; e.setTintFill(0xffdd55);
-          e.nextFire = this.runMs + Math.max(1400, 2600 - this.run.wave * 45) * (e.elite ? 0.7 : 1);
-        }
       } else if (e.ai === 'charge') {
         if (e.charge === 'wind') {
           e.setVelocity(0, 0);
@@ -858,7 +846,7 @@ export default class GameScene extends Phaser.Scene {
   startLevelUp() {
     this.cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available });
     this.freeze(true);
-    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.05);
+    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.1);
     sfx('level');
     bus.emit('levelup', { level: this.run.level - this.pendingLevels + 1, cards: this.cards });
   }
@@ -1098,13 +1086,6 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-  }
-
-  shooterFire(e) {
-    const a = Math.atan2(this.player.y - e.y, this.player.x - e.x);
-    const w = this.run.wave, n = w >= 14 ? 3 : w >= 9 ? 2 : 1;
-    for (let i = 0; i < n; i++) this.eshot(e.x, e.y, a + (i - (n - 1) / 2) * 0.22, 190, 7 + w * 0.45);
-    sfx('shoot');
   }
 
   // =====================================================================

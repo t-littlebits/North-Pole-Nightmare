@@ -1,7 +1,7 @@
 // Procedurally generates every in-game texture so the project needs no image assets.
 import { SPRITES, ICONS, drawSprite, skinPalette, PX } from './sprites.js';
 
-const ENEMY_SPRITES = ['e_snowman', 'e_elf', 'e_gingerbread', 'e_reindeer', 'e_ghost', 'e_nutcracker'];
+const ENEMY_SPRITES = ['e_snowman', 'e_elf', 'e_gingerbread', 'e_reindeer', 'e_ghost'];
 
 function mulberry(seed) {
   let a = seed;
