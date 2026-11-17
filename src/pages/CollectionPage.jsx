@@ -112,7 +112,7 @@ export default function CollectionPage() {
           <p className="muted">Each weapon has {MAX_SLOTS} mod slots. Mods change how a weapon behaves (knockbacks, slows, bounces, echoes...) but never add damage, attack speed or XP. Earn most of them from titles. The rest come from the advent calendar, and those can also turn up in mystery presents (about {Math.round(PRESENT_MOD_RATE * 100)}% each, revealed after your run) or a crate. Mods that a title can award are never found by luck.</p>
           <div className="panel row">
             <button className="btn" onClick={openCrate}>Open a Mod Crate · 🪙 {MOD_CRATE_PRICE}</button>
-            <span className="muted">A random mod you do not own yet (never one that a title awards).</span>
+            <span className="muted">A random mod you do not own yet.</span>
           </div>
           {Object.values(WEAPONS).filter((w) => owns('weapon', w.id)).map((w) => {
             const eq = loadout[w.id] || [];
@@ -156,7 +156,7 @@ export default function CollectionPage() {
 
       {tab === 'Titles' && (
         <>
-          <p className="muted">Titles show next to your name on the leaderboard and your profile. Earn them by playing.{profile?.equipped_title && <> Equipped: <TitleTag id={profile.equipped_title} /></>}</p>
+          <p className="muted">Titles show next to your name on the leaderboard and your profile.{profile?.equipped_title && <> Equipped: <TitleTag id={profile.equipped_title} /></>}</p>
           <div className="grid items">
             {TITLES.filter((t) => !t.manual || titles.includes(t.id)).map((t) => {
               const has = titles.includes(t.id), equipped = profile?.equipped_title === t.id;
