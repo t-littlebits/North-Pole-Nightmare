@@ -167,3 +167,6 @@ label { display: block; margin: 10px 0; } .search { font-size: 26px; margin-bott
 .chip:disabled { opacity: .5; cursor: not-allowed; }
 .swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; box-shadow: 0 0 0 2px var(--ink); vertical-align: middle; }
 textarea { font: inherit; background: var(--night); color: var(--snow); border: 3px solid var(--muted); padding: 8px 10px; width: 100%; resize: vertical; } textarea:focus { border-color: var(--gold); outline: 0; }
+
+/* finishing touches (what you pick once upgrades are maxed) */
+.card.finisher { background: #1d3a4a; } .card.finisher small { color: var(--ice); }

@@ -19,11 +19,11 @@ const modsData = await import('../src/data/mods.js');
 const { MODS, MOD_LIST, MAX_SLOTS, canEquip, sanitizeLoadout, rollPresentMods, rollModDrop, MOD_CRATE_PRICE, ACHIEVEMENT_MODS } = modsData;
 const { saveSettings } = await import('../src/lib/settings.js');
 const { SPRITES } = await import('../src/game/sprites.js');
-const { WEAPONS, CHARACTER_IDS, ENEMIES, MAX_POINTS_PER_KILL } = await import('../src/data/catalog.js');
+const { WEAPONS, CHARACTER_IDS, ENEMIES, MAX_POINTS_PER_KILL, MAX_WEAPON_LEVEL } = await import('../src/data/catalog.js');
 const { enemyHpScale, enemyDmgScale } = await import('../src/shared/rules.js');
 const { ADVENT_REWARDS } = await import('../src/data/advent.js');
 const { BOSSES, CHARACTERS } = await import('../src/data/catalog.js');
-const { rollUpgrades, applyUpgrade } = await import('../src/data/upgrades.js');
+const { rollUpgrades, applyUpgrade, STAT_UPGRADES, FINISHERS, CAPS, isMaxed, describeCard } = await import('../src/data/upgrades.js');
 const { TITLES, evaluateTitles, TITLE_BY_ID } = await import('../src/data/titles.js');
 const { validateRun } = await import('../src/shared/rules.js');
 const { demo } = await import('../src/lib/backend/demo.js');
@@ -454,14 +454,14 @@ test('balance: every enemy (even elite) stays inside the per-kill score limit th
 
 test('balance: bells no longer knock enemies away or grow past four bells', () => {
   const s = make('santa');
-  s.weapons = { bells: 8 };
+  s.weapons = { bells: MAX_WEAPON_LEVEL };
   const e = s.spawnEnemy('snowman', s.player.x + 10, s.player.y);
   for (let i = 0; i < 120; i++) { s.t += 16; s.runMs += 16; s.updateBells(0.016); e.x = s.bells[0].x; e.y = s.bells[0].y; }
-  assert.equal(s.bells.length, 4, 'four bells at level 8');
+  assert.equal(s.bells.length, 2 + Math.floor((MAX_WEAPON_LEVEL - 1) / 3), 'bell count at the weapon level cap');
   assert.ok(!e.kUntil, 'no knockback from the bells themselves');
   assert.ok(e.hp < e.maxHp, 'but they still hurt');
   const chime = make('santa', { loadout: { bells: ['chime'] } });
-  chime.weapons = { bells: 8 };
+  chime.weapons = { bells: MAX_WEAPON_LEVEL };
   const far = chime.spawnEnemy('snowman', chime.player.x + 60, chime.player.y);
   chime.runMs = 5000; chime.updateBells(0.016);
   assert.ok(far.kUntil > chime.runMs, 'the Chime Wave mod is now the only bell knockback');
@@ -470,7 +470,7 @@ test('balance: bells no longer knock enemies away or grow past four bells', () =
 test('balance: armor and regeneration are capped, level-up heal is small', () => {
   const stats = { maxHp: 100, hp: 100, speed: 100, atk: 1, dmg: 1, pickup: 60, regen: 0, crit: 0, xpMult: 1, armor: 0, cdr: 0, proj: 0, luck: 0 };
   for (let i = 0; i < 30; i++) { applyUpgrade({ kind: 'stat', id: 'armor', mult: 4 }, stats, {}); applyUpgrade({ kind: 'stat', id: 'regen', mult: 4 }, stats, {}); }
-  assert.equal(stats.armor, 8); assert.equal(stats.regen, 5);
+  assert.equal(stats.armor, 5); assert.equal(stats.regen, 2.5);
   const s = make('santa'); s.stats.hp = 50;
   s.startLevelUp(); s.chooseUpgrade(0);
   assert.ok(Math.abs(s.stats.hp - (50 + s.stats.maxHp * 0.05)) < 1e-6 || s.stats.hp <= 50 + s.stats.maxHp * 0.1 + 12);
@@ -617,4 +617,116 @@ test('red nose beam keeps working with every kind of enemy and boss in range', (
   s.sp.cd = 0; s.trySpecial();
   drive(s, 4, { pull: false });
   assert.equal(s.beam, null);
+});
+
+// ---------------- upgrade limits ----------------
+const maxEverything = (s) => {
+  for (const u of STAT_UPGRADES) for (let i = 0; i < 80; i++) applyUpgrade({ kind: 'stat', id: u.id, mult: 4 }, s.stats, s.weapons, s.cosmetics);
+  for (const w of Object.keys(WEAPONS)) s.weapons[w] = MAX_WEAPON_LEVEL;
+};
+
+test('upgrade limits: every stat stops at its ceiling no matter how many legendary picks', () => {
+  const s = make('santa');
+  const st = s.stats, b = st.base;
+  assert.ok(b && b.dmg === 1 && b.speed === 150);
+  maxEverything(s);
+  const near = (a, x) => assert.ok(Math.abs(a - x) < 1e-9, `${a} vs ${x}`);
+  near(st.dmg, b.dmg * 1.6); near(st.atk, 1.5); near(st.speed, b.speed * 1.4); near(st.maxHp, b.maxHp * 2);
+  near(st.pickup, b.pickup * 3); near(st.xpMult, b.xpMult * 1.6);
+  near(st.regen, 2.5); near(st.crit, 0.3); near(st.armor, 5); near(st.cdr, 0.4); near(st.luck, 0.5); assert.equal(st.proj, 2);
+  assert.ok(st.hp <= st.maxHp);
+  for (const u of STAT_UPGRADES) assert.ok(isMaxed(u.id, st), `${u.id} is maxed`);
+  assert.equal(Object.keys(CAPS).length, STAT_UPGRADES.length, 'every stat has a ceiling');
+});
+
+test('upgrade limits: weapons stop at the level cap', () => {
+  assert.equal(MAX_WEAPON_LEVEL, 6);
+  const w = { snowball: 5 };
+  applyUpgrade({ kind: 'weapon', id: 'snowball', levels: 3 }, {}, w);
+  assert.equal(w.snowball, MAX_WEAPON_LEVEL);
+  const ctx = { wave: 10, luck: 0, weapons: { snowball: 6 }, available: ['snowball'], stats: null, cosmetics: new Set() };
+  for (let i = 0; i < 200; i++) assert.ok(!rollUpgrades(ctx).some((c) => c.kind === 'weapon' && c.id === 'snowball'), 'a maxed weapon is never offered');
+});
+
+test('upgrade limits: maxed stats leave the pool and the cards say when a pick reaches the limit', () => {
+  const s = make('santa');
+  s.stats.dmg = s.stats.base.dmg * 1.6;     // only damage is maxed
+  const ctx = () => ({ wave: 10, luck: 0, weapons: { snowball: 1 }, available: ['snowball'], stats: s.stats, cosmetics: s.cosmetics });
+  for (let i = 0; i < 300; i++) assert.ok(!rollUpgrades(ctx()).some((c) => c.id === 'dmg'));
+  s.stats.atk = 1.46;                         // a pick of +8% would pass 1.5
+  assert.match(describeCard('stat', 'atk', 'common', ctx()).desc, /reaches the limit/);
+  s.stats.atk = 1.0;
+  assert.doesNotMatch(describeCard('stat', 'atk', 'common', ctx()).desc, /limit/);
+});
+
+test('after the limit: finishing touches only, none of which add power', () => {
+  const s = make('santa');
+  maxEverything(s);
+  const ctx = (cos) => ({ wave: 30, luck: 0, weapons: { ...s.weapons }, available: Object.keys(WEAPONS), stats: s.stats, cosmetics: cos });
+  for (let i = 0; i < 200; i++) {
+    const cards = rollUpgrades(ctx(new Set()));
+    assert.equal(cards.length, 3);
+    assert.ok(cards.every((c) => c.kind === 'finisher'));
+    assert.equal(new Set(cards.map((c) => c.id)).size, 3);
+  }
+  const before = JSON.stringify(s.stats);
+  const cos = new Set();
+  for (const f of FINISHERS.filter((x) => x.id !== 'cocoa')) applyUpgrade({ kind: 'finisher', id: f.id }, s.stats, s.weapons, cos);
+  assert.equal(cos.size, 4);
+  assert.equal(JSON.stringify(s.stats), before, 'cosmetics change no stats');
+  const last = rollUpgrades(ctx(cos));
+  assert.equal(last.length, 1);
+  assert.equal(last[0].id, 'cocoa');
+  assert.equal(last[0].auto, true);
+});
+
+test('partly maxed builds are topped up to three cards with finishing touches', () => {
+  const s = make('santa');
+  for (const u of STAT_UPGRADES) if (u.id !== 'luck' && u.id !== 'xp') for (let i = 0; i < 80; i++) applyUpgrade({ kind: 'stat', id: u.id, mult: 4 }, s.stats, s.weapons);
+  for (const w of Object.keys(WEAPONS)) s.weapons[w] = MAX_WEAPON_LEVEL;
+  const cards = rollUpgrades({ wave: 10, luck: 0, weapons: { ...s.weapons }, available: Object.keys(WEAPONS), stats: s.stats, cosmetics: new Set() });
+  assert.equal(cards.length, 3);
+  assert.deepEqual(cards.filter((c) => c.kind === 'stat').map((c) => c.id).sort(), ['luck', 'xp']);
+  assert.equal(cards.filter((c) => c.kind === 'finisher').length, 1);
+});
+
+test('in the game: with everything maxed a level-up is an instant cocoa refill, no menu', () => {
+  const s = make('santa');
+  maxEverything(s);
+  for (const id of ['trail_snow', 'trail_stars', 'halo', 'confetti']) s.cosmetics.add(id);
+  s.stats.hp = 20;
+  const asked = []; const off = bus.on('levelup', (d) => asked.push(d));
+  s.pendingLevels = 2;
+  s.startLevelUp();
+  off();
+  assert.equal(s.paused, false, 'the game was never paused');
+  assert.deepEqual(s.cards, []);
+  assert.equal(s.pendingLevels, 0);
+  assert.equal(asked.length, 0, 'no level-up menu');
+  assert.ok(Math.abs(s.stats.hp - Math.min(s.stats.maxHp, 20 + s.stats.maxHp * 0.4)) < 1e-6, 'two refills of 20%');
+});
+
+test('in the game: finishing touches run (trail, halo, confetti) without touching combat', () => {
+  const s = make('santa');
+  const cards = [];
+  for (const id of ['trail_snow', 'trail_stars', 'halo', 'confetti']) cards.push({ kind: 'finisher', id });
+  for (const c of cards) applyUpgrade(c, s.stats, s.weapons, s.cosmetics);
+  s.keys.right.isDown = true;               // keep moving so the trail has something to draw
+  drive(s, 12);
+  assert.equal(s.halo.length, 8);
+  assert.ok(s.run.kills > 0);
+  const plain = make('santa'); plain.stats.crit = 0; s.stats.crit = 0;
+  const hit = (sc) => { const e = sc.spawnEnemy('snowman', sc.player.x + 100, sc.player.y); sc.lastCrit = false; const b = sc.spawnSnowball(sc.player.x, sc.player.y, 0, 8, {}); sc.onBulletHit(b, e); return e.maxHp - e.hp; };
+  assert.equal(hit(s), hit(plain));
+});
+
+test('upgrade limits leave the enemies exactly as they were', () => {
+  const old = (w) => 1 + (w - 1) * 0.18 + Math.pow(w, 1.5) * 0.03;      // the curve from the balance update
+  const s = make('santa');
+  s.run.wave = 15;
+  const e = s.spawnEnemy('snowman', 100, 100);
+  assert.ok(Math.abs(e.maxHp - ENEMIES.snowman.hp * old(15)) < 1e-6);
+  maxEverything(s);
+  const e2 = s.spawnEnemy('snowman', 100, 100);
+  assert.equal(e2.maxHp, e.maxHp, 'enemy health does not depend on your upgrades');
 });

@@ -2,7 +2,7 @@
 // Pure data (no browser APIs) so Netlify Functions can import it too.
 
 export const WAVE_SECONDS = 30;
-export const MAX_WEAPON_LEVEL = 8;
+export const MAX_WEAPON_LEVEL = 6;   // weapons stop levelling here (was 8)
 
 export const CHARACTERS = {
   santa: {

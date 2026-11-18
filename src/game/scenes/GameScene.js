@@ -70,6 +70,9 @@ export default class GameScene extends Phaser.Scene {
       armor: 0, cdr: 0, proj: 0, luck: 0
     };
     this.stats.hp = this.stats.maxHp;
+    // Starting values: stat upgrades are capped relative to these.
+    this.stats.base = { maxHp: this.stats.maxHp, speed: this.stats.speed, atk: 1, dmg: 1, pickup: this.stats.pickup, xpMult: this.stats.xpMult };
+    this.cosmetics = new Set(); this.trailAt = 0; this.halo = null;
     this.shield = boost === 'shield_boost' ? 50 : 0;
     this.shieldUntil = Infinity;
     this.weapons = { [ch.weapon]: 1 };
@@ -306,7 +309,8 @@ export default class GameScene extends Phaser.Scene {
       this.dropGem(e.x, e.y, def.xp * (e.elite ? 4 : 1));
       if (e.elite && Math.random() < 0.3) this.spawnPresent(e.x, e.y);
     }
-    this.burst(e.x, e.y, e.elite || e.boss ? 0xffd166 : 0xffffff, e.boss ? 18 : 5);
+    const confetti = this.cosmetics.has('confetti');
+    this.burst(e.x, e.y, confetti ? Phaser.Utils.Array.GetRandom([0xe63946, 0xffcf4a, 0x35c27a, 0x6fb7ff, 0xff7ab8]) : (e.elite || e.boss ? 0xffd166 : 0xffffff), (e.boss ? 18 : 5) + (confetti ? 4 : 0));
     sfx('kill');
     e.destroy();
   }
@@ -896,7 +900,16 @@ export default class GameScene extends Phaser.Scene {
   }
 
   startLevelUp() {
-    this.cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available });
+    const cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available, stats: this.stats, cosmetics: this.cosmetics });
+    if (cards.length === 1 && cards[0].auto) {          // everything is maxed: a quick refill instead of a menu
+      applyUpgrade(cards[0], this.stats, this.weapons, this.cosmetics);
+      this.popText(this.player.x, this.player.y - 30, 'COCOA REFILL', '#9be7ff');
+      sfx('gem');
+      this.pendingLevels -= 1;
+      if (this.pendingLevels > 0) this.startLevelUp();
+      return;
+    }
+    this.cards = cards;
     this.freeze(true);
     this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.maxHp * 0.05);
     sfx('level');
@@ -905,7 +918,7 @@ export default class GameScene extends Phaser.Scene {
 
   chooseUpgrade(i) {
     if (!this.cards.length || !this.cards[i]) return;
-    applyUpgrade(this.cards[i], this.stats, this.weapons);
+    applyUpgrade(this.cards[i], this.stats, this.weapons, this.cosmetics);
     this.cards = [];
     this.pendingLevels -= 1;
     if (this.pendingLevels > 0) this.startLevelUp();
@@ -1055,6 +1068,21 @@ export default class GameScene extends Phaser.Scene {
   updateEffects(delta, dt) {
     const px = this.player.x, py = this.player.y, now = this.runMs;
     this.bossTint.setAlpha(this.bossFight() ? 0.1 + 0.04 * Math.sin(now / 300) : 0);
+
+    if (this.cosmetics.size) {            // finishing touches: purely visual
+      const moving = Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y) > 20;
+      const stars = this.cosmetics.has('trail_stars'), snow = this.cosmetics.has('trail_snow');
+      if ((stars || snow) && moving && now >= this.trailAt) {
+        this.trailAt = now + 70;
+        const b = this.add.image(px + Phaser.Math.Between(-6, 6), py + 14, stars ? 'spark' : 'flake').setDepth(py - 1);
+        if (stars) b.setTint(0xffd166);
+        this.tweens.add({ targets: b, alpha: 0, y: b.y + 16, duration: 650, onComplete: () => b.destroy() });
+      }
+      if (this.cosmetics.has('halo')) {
+        if (!this.halo) this.halo = Array.from({ length: 8 }, (_, i) => this.add.circle(0, 0, 3.5, i % 2 ? 0xe63946 : 0x35c27a));
+        this.halo.forEach((c, i) => { const a = now / 650 + (i * Math.PI) / 4; c.setPosition(px + Math.cos(a) * 36, py + Math.sin(a) * 18).setDepth(py + (Math.sin(a) > 0 ? 2 : -2)); });
+      }
+    }
 
     if (this.delayed.length) {
       const due = this.delayed.filter((d) => d.at <= now);

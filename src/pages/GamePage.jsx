@@ -189,10 +189,11 @@ function Playing({ cfg, onOver, onQuit }) {
         {levelup && (
           <div className="overlay">
             <h2>Level up! Choose a gift</h2>
+            {levelup.cards.some((c) => c.kind === 'finisher') && <p className="muted center-text">Some upgrades are maxed out. Finishing touches are cosmetic, or a small refill.</p>}
             <div className="cards">
               {levelup.cards.map((c, i) => (
-                <button key={`${c.id}${i}`} className={`card r-${c.rarity}`} onClick={() => bus.emit('ui:pick', i)}>
-                  <small>{RARITIES[c.rarity].name}</small>
+                <button key={`${c.id}${i}`} className={`card r-${c.rarity} ${c.kind === 'finisher' ? 'finisher' : ''}`} onClick={() => bus.emit('ui:pick', i)}>
+                  <small>{c.kind === 'finisher' ? 'Finishing touch' : RARITIES[c.rarity].name}</small>
                   <div className="card-icon">{c.iconWeapon ? <WeaponIcon id={c.iconWeapon} px={5} /> : <span>{c.icon}</span>}</div>
                   <strong>{c.name}</strong>
                   <p>{c.desc}</p>
