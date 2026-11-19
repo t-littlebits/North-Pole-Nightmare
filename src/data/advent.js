@@ -3,7 +3,7 @@
 export const ADVENT_REWARDS = [
   { day: 1, name: 'Pocket Change', rarity: 'common', grants: [{ type: 'coins', amount: 100 }] },
   { day: 2, name: 'Cocoa Rush', rarity: 'common', grants: [{ type: 'boost', id: 'xp_boost', amount: 1 }] },
-  { day: 3, name: 'Candy Striper Elf', rarity: 'rare', grants: [{ type: 'skin', id: 'elf_candy' }] },
+  { day: 3, name: 'Candy Cane Elf', rarity: 'rare', grants: [{ type: 'skin', id: 'elf_candy' }] },
   { day: 4, name: 'Glazed Gingerbread', rarity: 'rare', grants: [{ type: 'mod', id: 'glaze' }, { type: 'coins', amount: 50 }] },
   { day: 5, name: 'Bell Money', rarity: 'rare', grants: [{ type: 'coins', amount: 250 }] },
   { day: 6, name: 'Gingerbread Hearts', rarity: 'common', grants: [{ type: 'boost', id: 'heart_boost', amount: 2 }] },

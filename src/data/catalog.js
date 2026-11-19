@@ -49,7 +49,7 @@ export const SKINS = {
   santa_gold: { id: 'santa_gold', character: 'santa', name: 'Golden Santa', rarity: 'epic', price: 0, source: 'advent', palette: { R: '#e0a800', W: '#fff7d1', Y: '#ffffff', B: '#6b4a00' } },
   santa_aurora: { id: 'santa_aurora', character: 'santa', name: 'Aurora Santa', rarity: 'legendary', price: 0, source: 'advent', palette: { R: '#35e6a8', W: '#e8fff6', Y: '#b98cff', B: '#2a1f5e' } },
   elf_classic: { id: 'elf_classic', character: 'elf', name: 'Classic Elf', rarity: 'common', price: 0, source: 'default', palette: {} },
-  elf_candy: { id: 'elf_candy', character: 'elf', name: 'Candy Striper Elf', rarity: 'rare', price: 0, source: 'advent', palette: { G: '#e63946', R: '#ffffff', Y: '#ffffff' } },
+  elf_candy: { id: 'elf_candy', character: 'elf', name: 'Candy Cane Elf', rarity: 'rare', price: 0, source: 'advent', palette: { G: '#e63946', R: '#ffffff', Y: '#ffffff' } },
   elf_midnight: { id: 'elf_midnight', character: 'elf', name: 'Midnight Elf', rarity: 'rare', price: 350, source: 'shop', palette: { G: '#2b3a8f', R: '#8fd0ff', Y: '#8fd0ff' } },
   snowman_classic: { id: 'snowman_classic', character: 'snowman', name: 'Classic Snowman', rarity: 'common', price: 0, source: 'default', palette: {} },
   snowman_festive: { id: 'snowman_festive', character: 'snowman', name: 'Top Hat Snowman', rarity: 'rare', price: 0, source: 'advent', palette: { K: '#14452f', R: '#e63946' } },
@@ -59,9 +59,12 @@ export const SKINS = {
   reindeer_snow: { id: 'reindeer_snow', character: 'reindeer', name: 'Snow Reindeer', rarity: 'rare', price: 500, source: 'shop', palette: { N: '#e8eef5', D: '#9fb4c7', T: '#ffffff', A: '#c9a66b' } },
   knight_classic: { id: 'knight_classic', character: 'knight', name: 'Classic Knight', rarity: 'common', price: 0, source: 'default', palette: {} },
   knight_royal: { id: 'knight_royal', character: 'knight', name: 'Royal Knight', rarity: 'epic', price: 0, source: 'advent', palette: { S: '#ffd166', I: '#b57cff' } },
+  knight_arctic: { id: 'knight_arctic', character: 'knight', name: 'Arctic Wolf Spider', rarity: 'legendary', price: 0, source: 'secret', hidden: true, palette: {} },
   knight_dark: { id: 'knight_dark', character: 'knight', name: 'Burnt Knight', rarity: 'rare', price: 600, source: 'shop', palette: { B: '#4a2a18', S: '#6b6b7a', I: '#d0d0d0' } }
 };
 export const defaultSkinFor = (character) => `${character}_classic`;
+/** Secret skins are hidden from the collection until you own them. */
+export const isSkinVisible = (skin, owned) => !skin.hidden || !!owned;
 
 // Enemies. `pts` is the score value; `xp` the gem value dropped.
 export const ENEMIES = {

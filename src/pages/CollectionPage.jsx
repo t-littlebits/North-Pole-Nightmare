@@ -6,12 +6,14 @@ import { CHARACTERS, CHARACTER_IDS, SKINS, WEAPONS, BOOSTS, RARITIES } from '../
 import { ADVENT_REWARDS } from '../data/advent.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
 import { TITLES, titleProgress } from '../data/titles.js';
+import { COSMETIC_LIST, COSMETIC_SLOTS, SLOT_NAMES } from '../data/cosmetics.js';
+import { isSkinVisible } from '../data/catalog.js';
 import TitleTag from '../components/TitleTag.jsx';
 import { MODS, MOD_LIST, MAX_SLOTS, MOD_CRATE_PRICE, PRESENT_MOD_RATE, canEquip, modFits } from '../data/mods.js';
 
 const adventDay = {};
 ADVENT_REWARDS.forEach((r) => r.grants.forEach((g) => { adventDay[`${g.type}:${g.id}`] = r.day; }));
-const TABS = ['Heroes', 'Skins', 'Weapons', 'Mods', 'Boosts', 'Titles'];
+const TABS = ['Heroes', 'Skins', 'Effects', 'Weapons', 'Mods', 'Boosts', 'Titles'];
 
 export default function CollectionPage() {
   const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims, inventory, showToast } = useApp();
@@ -20,8 +22,9 @@ export default function CollectionPage() {
   const buy = (type, id, name) => { if (!needAuth()) act(() => backend.buy(type, id), `Unlocked ${name}!`); };
   const select = (args, msg) => { if (!needAuth()) act(() => backend.select(args), msg); };
 
-  const total = CHARACTER_IDS.length + Object.keys(SKINS).length + Object.keys(WEAPONS).length;
-  const have = CHARACTER_IDS.filter((c) => owns('character', c)).length + Object.keys(SKINS).filter((s) => owns('skin', s)).length + Object.keys(WEAPONS).filter((w) => owns('weapon', w)).length;
+  const shownSkins = Object.values(SKINS).filter((s) => isSkinVisible(s, owns('skin', s.id)));   // secret skins stay hidden until you own them
+  const total = CHARACTER_IDS.length + shownSkins.length + Object.keys(WEAPONS).length;
+  const have = CHARACTER_IDS.filter((c) => owns('character', c)).length + shownSkins.filter((s) => owns('skin', s.id)).length + Object.keys(WEAPONS).filter((w) => owns('weapon', w)).length;
   const boosts = Object.entries(profile?.boosts || {}).filter(([, n]) => n > 0);
   const ownedMods = new Set(inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id));
   const loadout = profile?.loadout || {};
@@ -73,7 +76,7 @@ export default function CollectionPage() {
         <section key={cid}>
           <h3>{CHARACTERS[cid].name}</h3>
           <div className="grid items">
-            {Object.values(SKINS).filter((s) => s.character === cid).map((s) => {
+            {shownSkins.filter((s) => s.character === cid).map((s) => {
               const has = owns('skin', s.id), equipped = skinFor(cid) === s.id;
               return (
                 <div key={s.id} className={`panel item ${has ? '' : 'locked'}`} style={{ outlineColor: RARITIES[s.rarity].color }}>
@@ -89,6 +92,32 @@ export default function CollectionPage() {
           </div>
         </section>
       ))}
+
+      {tab === 'Effects' && (
+        <>
+          <p className="muted">Effects are purely cosmetic: they add no power. Buy them with coins and equip one in each slot. They show during your runs.</p>
+          {COSMETIC_SLOTS.map((slot) => (
+            <section key={slot}>
+              <h3>{SLOT_NAMES[slot]}</h3>
+              <div className="grid items">
+                {COSMETIC_LIST.filter((c) => c.slot === slot).map((c) => {
+                  const has = owns('cosmetic', c.id), eq = profile?.cosmetics?.[slot] === c.id;
+                  return (
+                    <div key={c.id} className={`panel item ${has ? '' : 'locked'}`}>
+                      <span className="emoji big">{c.icon}</span>
+                      <strong>{c.name}</strong>
+                      <span className="small-text" style={{ color: RARITIES[c.rarity].color }}>{RARITIES[c.rarity].name}</span>
+                      <span className="small-text">{c.desc}</span>
+                      {has ? <button className="btn small" onClick={() => { if (!needAuth()) act(() => backend.equipCosmetic(slot, eq ? null : c.id), eq ? `${c.name} removed` : `${c.name} equipped`); }}>{eq ? 'Remove' : 'Equip'}</button>
+                        : <><Price price={c.price} /><button className="btn small" onClick={() => buy('cosmetic', c.id, c.name)}>Buy</button></>}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </>
+      )}
 
       {tab === 'Weapons' && (
         <div className="grid items">

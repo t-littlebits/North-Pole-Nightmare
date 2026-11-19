@@ -17,7 +17,10 @@ export default function HomePage() {
   return (
     <div className="page">
       <section className="hero">
-        <h1 className="logo"><span>NORTH POLE</span><span>NIGHTMARE</span></h1>
+        <div className="logo-wrap">
+          <h1 className="logo"><span>NORTH POLE</span><span>NIGHTMARE</span></h1>
+          <span className="splash" aria-label="Play tester version">Play tester version</span>
+        </div>
         <div className="parade" aria-hidden="true">
           <div className="side">{CHARACTER_IDS.map((c, i) => <Hero key={c} character={c} skin={skinFor(c)} px={6} className="bob" />)}</div>
           <div className="side foes">{['e_ghost', 'e_reindeer', 'e_gingerbread', 'e_elf', 'e_snowman'].map((e) => <Enemy key={e} id={e} px={6} className="bob alt" />)}</div>

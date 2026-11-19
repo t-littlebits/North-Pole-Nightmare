@@ -5,6 +5,7 @@ import { validateRun, checkClaim, adventYear } from '../../shared/rules.js';
 import { USERNAME_RE } from '../../shared/rules.js';
 import { clock } from '../clock.js';
 import { evaluateTitles, TITLE_BY_ID } from '../../data/titles.js';
+import { COSMETICS, COSMETIC_SLOTS, sanitizeCosmetics } from '../../data/cosmetics.js';
 import { MOD_CRATE_PRICE, MAX_SLOTS, canEquip, sanitizeLoadout, rollModDrop, rollPresentMods } from '../../data/mods.js';
 
 const KEY = 'npn.demo.v1';
@@ -30,7 +31,7 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catc
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
 const me = () => {
   const u = db.session ? db.users[db.session] : null;
-  if (u) { u.titles ||= []; if (u.profile.equipped_title === undefined) u.profile.equipped_title = null; u.profile.loadout ||= {}; }
+  if (u) { u.titles ||= []; if (u.profile.equipped_title === undefined) u.profile.equipped_title = null; u.profile.loadout ||= {}; u.profile.cosmetics ||= {}; }
   return u;
 };
 
@@ -52,6 +53,7 @@ function awardTitles(u) {
   }
   return { titles: fresh, mods };
 }
+const ownedCosmeticSet = (u) => new Set(u.inventory.filter((i) => i.item_type === 'cosmetic').map((i) => i.item_id));
 const ownedModSet = (u) => new Set(u.inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id));
 const notifyAuth = () => authSubs.forEach((f) => f());
 const notifyLb = () => lbSubs.forEach((f) => f());
@@ -68,7 +70,7 @@ function newUser(username) {
     profile: {
       id, username, coins: 0, selected_character: 'santa', equipped: {}, boosts: {}, active_boost: null,
       games_played: 0, total_kills: 0, total_score: 0, best_score: 0, best_wave: 0, total_seconds: 0,
-      bosses_defeated: 0, presents_opened: 0, equipped_title: null, loadout: {}, created_at: new Date().toISOString()
+      bosses_defeated: 0, presents_opened: 0, equipped_title: null, loadout: {}, cosmetics: {}, created_at: new Date().toISOString()
     }
   };
 }
@@ -127,7 +129,7 @@ export const demo = {
     const runId = uid();
     u.runs[runId] = { character, boost, startedAt: Date.now(), submitted: false };
     save();
-    return { runId, boost, loadout: sanitizeLoadout(u.profile.loadout, ownedModSet(u)) };
+    return { runId, boost, loadout: sanitizeLoadout(u.profile.loadout, ownedModSet(u)), cosmetics: sanitizeCosmetics(u.profile.cosmetics, ownedCosmeticSet(u)) };
   },
 
   async submitRun(runId, stats) {
@@ -177,6 +179,7 @@ export const demo = {
     if (type === 'character' && CHARACTERS[id]) price = CHARACTERS[id].price;
     else if (type === 'weapon' && WEAPONS[id]) price = WEAPONS[id].price;
     else if (type === 'skin' && SKINS[id]?.source === 'shop') price = SKINS[id].price;
+    else if (type === 'cosmetic' && COSMETICS[id]) price = COSMETICS[id].price;
     if (!price) fail('This item cannot be bought');
     if (owns(u, type, id)) fail('You already own this');
     if (u.profile.coins < price) fail('Not enough coins');
@@ -201,6 +204,17 @@ export const demo = {
     const u = me() || fail('Sign in first');
     if (id && !(BOOSTS[id] && (u.profile.boosts[id] || 0) > 0)) fail('You have none of this boost');
     u.profile.active_boost = id || null;
+    save();
+  },
+
+  async equipCosmetic(slot, id) {
+    const u = me() || fail('Sign in first');
+    if (!COSMETIC_SLOTS.includes(slot)) fail('Unknown slot');
+    if (id) {
+      if (!COSMETICS[id] || COSMETICS[id].slot !== slot) fail('That effect does not fit this slot');
+      if (!owns(u, 'cosmetic', id)) fail('You have not unlocked that effect');
+      u.profile.cosmetics[slot] = id;
+    } else delete u.profile.cosmetics[slot];
     save();
   },
 
@@ -247,6 +261,7 @@ export const demo = {
   async grantOwner() {
     const u = me() || fail('Sign in first');
     for (const t of ['owner', 'founder']) if (!u.titles.includes(t)) u.titles.push(t);
+    for (const sk of Object.values(SKINS)) if (sk.hidden) give(u, 'skin', sk.id);   // secret skins
     u.profile.equipped_title = 'owner';
     save(); notifyLb();
   },

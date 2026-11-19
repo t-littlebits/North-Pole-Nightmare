@@ -60,7 +60,18 @@ export const SPRITES = {
   e_ghost: { rows: GHOST, pal: { W: '#cfe9ff', K: '#12202e', R: '#d7263d' } }
 };
 
+// Some skins replace the whole sprite, not just its colours.
+const ARCTIC_SPIDER = [
+  '............', '.K........K.', '..K.WBBW.K..', '..KKEBBEKK..', 'KK.DBLLBD.KK', '.KKBWLLBBKK.',
+  'KK.BBLLBW.KK', '.KKDBLLBDKK.', '..K.DBBD.K..', '.K..DDDD..K.', '.K........K.', '............'
+];
+export const SKIN_ART = {
+  knight_arctic: { rows: ARCTIC_SPIDER, pal: { K: '#2b2320', D: '#4a3c30', B: '#7a6552', L: '#e6dfd0', W: '#ffffff', E: '#ffd54a' } }
+};
+export const skinRows = (spriteId, skinId) => (skinId && SKIN_ART[skinId] ? SKIN_ART[skinId].rows : SPRITES[spriteId].rows);
+
 export const skinPalette = (spriteId, skinId) => {
+  if (skinId && SKIN_ART[skinId]) return SKIN_ART[skinId].pal;
   const base = SPRITES[spriteId].pal;
   const skin = skinId && SKINS[skinId];
   return skin && skin.character === spriteId ? { ...base, ...skin.palette } : base;
@@ -83,7 +94,7 @@ export function spriteURL(spriteId, skinId, px = 6) {
   const s = SPRITES[spriteId];
   const c = document.createElement('canvas');
   c.width = c.height = 12 * px;
-  drawSprite(c.getContext('2d'), s.rows, skinPalette(spriteId, skinId), px);
+  drawSprite(c.getContext('2d'), skinRows(spriteId, skinId), skinPalette(spriteId, skinId), px);
   const url = c.toDataURL();
   urlCache.set(key, url);
   return url;

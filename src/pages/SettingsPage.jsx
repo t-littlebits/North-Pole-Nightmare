@@ -47,7 +47,7 @@ export default function SettingsPage() {
         {isDemo && (
           <div className="danger">
             <p className="muted">Demo mode keeps everything in this browser.</p>
-            {user && <button className="btn ghost" onClick={() => act(() => backend.grantOwner(), 'Owner title granted (demo only)')}>Grant myself the Owner title</button>}
+            {user && <button className="btn ghost" onClick={() => act(() => backend.grantOwner(), 'Owner title and secret skins granted (demo only)')}>Grant myself the Owner title and secret skins</button>}
             <button className="btn ghost" onClick={async () => { if (window.confirm('Delete all demo players and progress on this device?')) { await backend.resetAll(); showToast('Demo data cleared', 'ok'); } }}>Reset demo data</button>
           </div>
         )}

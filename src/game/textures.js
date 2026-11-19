@@ -1,5 +1,5 @@
 // Procedurally generates every in-game texture so the project needs no image assets.
-import { SPRITES, ICONS, drawSprite, skinPalette, PX } from './sprites.js';
+import { SPRITES, ICONS, drawSprite, skinPalette, skinRows, PX } from './sprites.js';
 
 const ENEMY_SPRITES = ['e_snowman', 'e_elf', 'e_gingerbread', 'e_reindeer', 'e_ghost', 'e_nutcracker'];
 
@@ -18,7 +18,7 @@ export function buildTextures(scene, character, skinId, arena) {
   };
   const rect = (ctx, c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
 
-  make(`player_${character}_${skinId}`, 12 * PX, 12 * PX, (ctx) => drawSprite(ctx, SPRITES[character].rows, skinPalette(character, skinId), PX));
+  make(`player_${character}_${skinId}`, 12 * PX, 12 * PX, (ctx) => drawSprite(ctx, skinRows(character, skinId), skinPalette(character, skinId), PX));
   ENEMY_SPRITES.forEach((id) => make(id, 12 * PX, 12 * PX, (ctx) => drawSprite(ctx, SPRITES[id].rows, SPRITES[id].pal, PX)));
 
   ['snowball', 'candycane', 'bells', 'bomb'].forEach((id) => make(`w_${id}`, 16, 16, (ctx) => drawSprite(ctx, ICONS[id].rows, ICONS[id].pal, 2)));

@@ -53,13 +53,10 @@ export function clampStat(id, s) {
   if (id === 'maxhp') s.hp = Math.min(s.hp, s.maxHp);
 }
 
-// ---- Finishing touches: what you can pick once the real upgrades run out. None of them add power. ----
+// ---- Finishing touch: what you get once the real upgrades run out. It adds no power. ----
+// (Cosmetic effects such as trails and auras are bought with coins now: see data/cosmetics.js.)
 export const FINISHERS = [
-  { id: 'cocoa', icon: '☕', name: 'Cocoa Refill', desc: 'Restore 20% of your max health.', repeat: true },
-  { id: 'trail_snow', icon: '❄', name: 'Snowflake Trail', desc: 'Cosmetic: a drift of snowflakes follows you.' },
-  { id: 'trail_stars', icon: '✨', name: 'Golden Sparkles', desc: 'Cosmetic: a trail of sparkles follows you.' },
-  { id: 'halo', icon: '🎄', name: 'Holly Halo', desc: 'Cosmetic: a ring of holly orbits you.' },
-  { id: 'confetti', icon: '🎉', name: 'Festive Confetti', desc: 'Cosmetic: defeated enemies burst into confetti.' }
+  { id: 'cocoa', icon: '☕', name: 'Cocoa Refill', desc: 'Restore 20% of your max health.', repeat: true }
 ];
 
 export function rollRarity(ctx, rng, minRarity = 'common') {
@@ -78,7 +75,7 @@ export function rollRarity(ctx, rng, minRarity = 'common') {
 }
 
 /**
- * ctx = { wave, luck, weapons: {id: level}, available: [weaponIds], stats?, cosmetics?: Set }
+ * ctx = { wave, luck, weapons: {id: level}, available: [weaponIds], stats? }
  * Returns up to `count` distinct cards. Maxed stats are left out; any shortfall is filled with finishing touches.
  */
 export function rollUpgrades(ctx, rng = Math.random, count = 3) {
@@ -100,7 +97,7 @@ export function rollUpgrades(ctx, rng = Math.random, count = 3) {
   }
   const cards = picks.map((p) => describeCard(p.kind, p.id, rollRarity(ctx, rng, p.min), ctx));
   if (cards.length < count) {
-    const eligible = FINISHERS.filter((f) => f.repeat || !(ctx.cosmetics && ctx.cosmetics.has(f.id)));
+    const eligible = [...FINISHERS];
     while (cards.length < count && eligible.length) {
       const f = eligible.splice(Math.floor(rng() * eligible.length), 1)[0];
       cards.push({ kind: 'finisher', id: f.id, rarity: 'common', icon: f.icon, name: f.name, desc: f.desc });
@@ -128,12 +125,11 @@ export function describeCard(kind, id, rarity, ctx) {
   return { kind, id, rarity, icon: u.icon, name: u.name, desc, mult: R.mult };
 }
 
-export function applyUpgrade(card, stats, weapons, cosmetics = null) {
+export function applyUpgrade(card, stats, weapons) {
   if (card.kind === 'weapon') {
     weapons[card.id] = Math.min(MAX_WEAPON_LEVEL, (weapons[card.id] || 0) + card.levels);
   } else if (card.kind === 'finisher') {
     if (card.id === 'cocoa') stats.hp = Math.min(stats.maxHp, stats.hp + stats.maxHp * 0.2);
-    else if (cosmetics) cosmetics.add(card.id);
   } else {
     STAT_BY_ID[card.id].apply(stats, card.mult);
     clampStat(card.id, stats);

@@ -18,6 +18,7 @@ create table if not exists public.profiles (
   boosts jsonb not null default '{}'::jsonb,        -- {"xp_boost": 2, ...}
   active_boost text,
   equipped_title text,
+  cosmetics jsonb not null default '{}'::jsonb,     -- equipped effects: {"trail": "trail_snow", "aura": ..., "kill": ...}
   loadout jsonb not null default '{}'::jsonb,       -- equipped weapon mods: {"snowball": ["echo","gust"], ...}
   settings jsonb not null default '{}'::jsonb,
   games_played int not null default 0,
@@ -35,7 +36,7 @@ create unique index if not exists profiles_username_lower on public.profiles (lo
 
 create table if not exists public.inventory (
   user_id uuid not null references public.profiles(id) on delete cascade,
-  item_type text not null check (item_type in ('character','skin','weapon','mod')),
+  item_type text not null check (item_type in ('character','skin','weapon','mod','cosmetic')),
   item_id text not null,
   source text not null default 'default',
   acquired_at timestamptz not null default now(),
@@ -279,6 +280,21 @@ begin
   return 'Granted ' || p_title || ' to ' || p_username;
 end $$;
 revoke all on function public.grant_title(text, text) from public, anon, authenticated;
+
+-- Hand a player a secret/special item (e.g. the hidden Arctic Wolf Spider skin). Run it yourself in the SQL Editor:
+--   select public.grant_item('PlayerName', 'skin', 'knight_arctic');
+-- Not exposed to the browser or the anon/authenticated roles.
+create or replace function public.grant_item(p_username text, p_type text, p_id text) returns text
+language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  if p_type not in ('character', 'skin', 'weapon', 'mod', 'cosmetic') then raise exception 'Unknown item type: %', p_type; end if;
+  select id into uid from public.profiles where lower(username) = lower(p_username);
+  if uid is null then raise exception 'No such player: %', p_username; end if;
+  insert into public.inventory (user_id, item_type, item_id, source) values (uid, p_type, p_id, 'admin') on conflict do nothing;
+  return 'Granted ' || p_type || ' ' || p_id || ' to ' || p_username;
+end $$;
+revoke all on function public.grant_item(text, text, text) from public, anon, authenticated;
 
 -- ---------- Explicit grants ----------
 -- Newer Supabase projects do NOT automatically expose new tables/functions to the Data API,

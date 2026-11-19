@@ -1,6 +1,7 @@
 import { handler, json } from '../lib/server.js';
 import { BOOSTS, CHARACTERS, SKINS, WEAPONS } from '../../src/data/catalog.js';
 import { TITLE_BY_ID } from '../../src/data/titles.js';
+import { COSMETICS, COSMETIC_SLOTS } from '../../src/data/cosmetics.js';
 import { awardTitles } from '../lib/titles.js';
 import { ownedMods } from '../lib/mods.js';
 import { MOD_CRATE_PRICE, MAX_SLOTS, canEquip, rollModDrop } from '../../src/data/mods.js';
@@ -21,6 +22,7 @@ export default handler(async ({ sb, user, body }) => {
     if (type === 'character' && CHARACTERS[id]) price = CHARACTERS[id].price;
     else if (type === 'weapon' && WEAPONS[id]) price = WEAPONS[id].price;
     else if (type === 'skin' && SKINS[id] && SKINS[id].source === 'shop') price = SKINS[id].price;
+    else if (type === 'cosmetic' && COSMETICS[id]) price = COSMETICS[id].price;
     if (!price) return json(400, { error: 'This item cannot be bought' });
     const { error } = await sb.rpc('buy_item', { p_user: user.id, p_type: type, p_id: id, p_price: price });
     if (error) {
@@ -54,6 +56,18 @@ export default handler(async ({ sb, user, body }) => {
     const { error } = await sb.from('profiles').update({ active_boost: id }).eq('id', user.id);
     return error ? json(500, { error: 'Could not save' }) : json(200, { ok: true });
   }
+  if (action === 'cosmetic') {
+    const slot = String(body.slot || ''), id = body.id ? String(body.id) : null;
+    if (!COSMETIC_SLOTS.includes(slot)) return json(400, { error: 'Unknown slot' });
+    if (id && (!COSMETICS[id] || COSMETICS[id].slot !== slot)) return json(400, { error: 'That effect does not fit this slot' });
+    if (id && !(await owns(sb, user.id, 'cosmetic', id))) return json(403, { error: 'You have not unlocked that effect' });
+    const { data: prof } = await sb.from('profiles').select('cosmetics').eq('id', user.id).single();
+    const cosmetics = { ...(prof?.cosmetics || {}) };
+    if (id) cosmetics[slot] = id; else delete cosmetics[slot];
+    const { error } = await sb.from('profiles').update({ cosmetics }).eq('id', user.id);
+    return error ? json(500, { error: 'Could not save' }) : json(200, { ok: true });
+  }
+
   if (action === 'loadout') {
     const weapon = String(body.weapon || '');
     const list = Array.isArray(body.mods) ? body.mods.map(String) : [];

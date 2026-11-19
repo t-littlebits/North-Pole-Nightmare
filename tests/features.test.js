@@ -24,6 +24,10 @@ const { enemyHpScale, enemyDmgScale } = await import('../src/shared/rules.js');
 const { ADVENT_REWARDS } = await import('../src/data/advent.js');
 const { BOSSES, CHARACTERS } = await import('../src/data/catalog.js');
 const { rollUpgrades, applyUpgrade, STAT_UPGRADES, FINISHERS, CAPS, isMaxed, describeCard } = await import('../src/data/upgrades.js');
+const { COSMETICS, COSMETIC_LIST, COSMETIC_SLOTS, sanitizeCosmetics } = await import('../src/data/cosmetics.js');
+const { SKINS, isSkinVisible } = await import('../src/data/catalog.js');
+const { SKIN_ART, skinRows } = await import('../src/game/sprites.js');
+import fs from 'node:fs';
 const { TITLES, evaluateTitles, TITLE_BY_ID } = await import('../src/data/titles.js');
 const { validateRun } = await import('../src/shared/rules.js');
 const { demo } = await import('../src/lib/backend/demo.js');
@@ -659,26 +663,6 @@ test('upgrade limits: maxed stats leave the pool and the cards say when a pick r
   assert.doesNotMatch(describeCard('stat', 'atk', 'common', ctx()).desc, /limit/);
 });
 
-test('after the limit: finishing touches only, none of which add power', () => {
-  const s = make('santa');
-  maxEverything(s);
-  const ctx = (cos) => ({ wave: 30, luck: 0, weapons: { ...s.weapons }, available: Object.keys(WEAPONS), stats: s.stats, cosmetics: cos });
-  for (let i = 0; i < 200; i++) {
-    const cards = rollUpgrades(ctx(new Set()));
-    assert.equal(cards.length, 3);
-    assert.ok(cards.every((c) => c.kind === 'finisher'));
-    assert.equal(new Set(cards.map((c) => c.id)).size, 3);
-  }
-  const before = JSON.stringify(s.stats);
-  const cos = new Set();
-  for (const f of FINISHERS.filter((x) => x.id !== 'cocoa')) applyUpgrade({ kind: 'finisher', id: f.id }, s.stats, s.weapons, cos);
-  assert.equal(cos.size, 4);
-  assert.equal(JSON.stringify(s.stats), before, 'cosmetics change no stats');
-  const last = rollUpgrades(ctx(cos));
-  assert.equal(last.length, 1);
-  assert.equal(last[0].id, 'cocoa');
-  assert.equal(last[0].auto, true);
-});
 
 test('partly maxed builds are topped up to three cards with finishing touches', () => {
   const s = make('santa');
@@ -690,10 +674,30 @@ test('partly maxed builds are topped up to three cards with finishing touches', 
   assert.equal(cards.filter((c) => c.kind === 'finisher').length, 1);
 });
 
-test('in the game: with everything maxed a level-up is an instant cocoa refill, no menu', () => {
+
+
+test('upgrade limits leave the enemies exactly as they were', () => {
+  const old = (w) => 1 + (w - 1) * 0.18 + Math.pow(w, 1.5) * 0.03;      // the curve from the balance update
+  const s = make('santa');
+  s.run.wave = 15;
+  const e = s.spawnEnemy('snowman', 100, 100);
+  assert.ok(Math.abs(e.maxHp - ENEMIES.snowman.hp * old(15)) < 1e-6);
+  maxEverything(s);
+  const e2 = s.spawnEnemy('snowman', 100, 100);
+  assert.equal(e2.maxHp, e.maxHp, 'enemy health does not depend on your upgrades');
+});
+
+// ---------------- after the limit ----------------
+test('after the limit: only the cocoa refill is left, and it is applied without a menu', () => {
   const s = make('santa');
   maxEverything(s);
-  for (const id of ['trail_snow', 'trail_stars', 'halo', 'confetti']) s.cosmetics.add(id);
+  assert.deepEqual(FINISHERS.map((f) => f.id), ['cocoa']);
+  for (let i = 0; i < 100; i++) {
+    const cards = rollUpgrades({ wave: 30, luck: 0, weapons: { ...s.weapons }, available: Object.keys(WEAPONS), stats: s.stats });
+    assert.equal(cards.length, 1);
+    assert.equal(cards[0].id, 'cocoa');
+    assert.equal(cards[0].auto, true);
+  }
   s.stats.hp = 20;
   const asked = []; const off = bus.on('levelup', (d) => asked.push(d));
   s.pendingLevels = 2;
@@ -706,27 +710,114 @@ test('in the game: with everything maxed a level-up is an instant cocoa refill, 
   assert.ok(Math.abs(s.stats.hp - Math.min(s.stats.maxHp, 20 + s.stats.maxHp * 0.4)) < 1e-6, 'two refills of 20%');
 });
 
-test('in the game: finishing touches run (trail, halo, confetti) without touching combat', () => {
-  const s = make('santa');
-  const cards = [];
-  for (const id of ['trail_snow', 'trail_stars', 'halo', 'confetti']) cards.push({ kind: 'finisher', id });
-  for (const c of cards) applyUpgrade(c, s.stats, s.weapons, s.cosmetics);
-  s.keys.right.isDown = true;               // keep moving so the trail has something to draw
-  drive(s, 12);
-  assert.equal(s.halo.length, 8);
-  assert.ok(s.run.kills > 0);
-  const plain = make('santa'); plain.stats.crit = 0; s.stats.crit = 0;
-  const hit = (sc) => { const e = sc.spawnEnemy('snowman', sc.player.x + 100, sc.player.y); sc.lastCrit = false; const b = sc.spawnSnowball(sc.player.x, sc.player.y, 0, 8, {}); sc.onBulletHit(b, e); return e.maxHp - e.hp; };
-  assert.equal(hit(s), hit(plain));
+// ---------------- cosmetic effects (coin shop) ----------------
+test('cosmetics catalogue: three slots, priced, and the old upgrade-pool cosmetics are now shop items', () => {
+  assert.deepEqual(COSMETIC_SLOTS, ['trail', 'aura', 'kill']);
+  assert.ok(COSMETIC_LIST.length >= 12);
+  for (const slot of COSMETIC_SLOTS) assert.ok(COSMETIC_LIST.filter((c) => c.slot === slot).length >= 3, slot);
+  for (const c of COSMETIC_LIST) { assert.ok(c.price > 0 && c.price <= 1000, c.id); assert.ok(c.name && c.desc && c.icon); }
+  for (const id of ['trail_snow', 'trail_stars', 'halo_holly', 'kill_confetti']) assert.ok(COSMETICS[id], `${id} (formerly an upgrade pick) is in the shop`);
+  const picks = rollUpgrades({ wave: 10, luck: 0, weapons: {}, available: [], stats: null });
+  assert.ok(picks.every((c) => !String(c.id).match(/trail|halo|confetti/)), 'no cosmetics among level-up cards');
 });
 
-test('upgrade limits leave the enemies exactly as they were', () => {
-  const old = (w) => 1 + (w - 1) * 0.18 + Math.pow(w, 1.5) * 0.03;      // the curve from the balance update
-  const s = make('santa');
-  s.run.wave = 15;
-  const e = s.spawnEnemy('snowman', 100, 100);
-  assert.ok(Math.abs(e.maxHp - ENEMIES.snowman.hp * old(15)) < 1e-6);
-  maxEverything(s);
-  const e2 = s.spawnEnemy('snowman', 100, 100);
-  assert.equal(e2.maxHp, e.maxHp, 'enemy health does not depend on your upgrades');
+test('cosmetic selections are validated per slot and by ownership', () => {
+  const owned = new Set(['trail_snow', 'halo_holly']);
+  assert.deepEqual(sanitizeCosmetics({ trail: 'trail_snow', aura: 'halo_holly', kill: 'kill_confetti' }, owned), { trail: 'trail_snow', aura: 'halo_holly' });
+  assert.deepEqual(sanitizeCosmetics({ trail: 'halo_holly' }, owned), {}, 'wrong slot');
+  assert.deepEqual(sanitizeCosmetics({ trail: 'nope', aura: 7 }, null), {});
+  assert.deepEqual(sanitizeCosmetics(null), {});
+  assert.deepEqual(sanitizeCosmetics({ kill: 'kill_snow' }), { kill: 'kill_snow' }, 'no owner set means trust (already validated)');
+});
+
+for (const c of COSMETIC_LIST) {
+  test(`cosmetic ${c.id} renders in a run and changes no combat numbers`, () => {
+    const s = make('santa', { cosmetics: { [c.slot]: c.id } });
+    assert.equal(s.fx[c.slot], c.id);
+    s.keys.right.isDown = true;
+    drive(s, 8);
+    assert.ok(s.run.kills > 0);
+    if (c.slot === 'aura') assert.ok(s.auraParts || s.auraRing, 'aura objects were created');
+    const plain = make('santa'); plain.stats.crit = 0; s.stats.crit = 0;
+    const hit = (sc) => { const e = sc.spawnEnemy('snowman', sc.player.x + 100, sc.player.y); sc.lastCrit = false; const b = sc.spawnSnowball(sc.player.x, sc.player.y, 0, 8, {}); sc.onBulletHit(b, e); return e.maxHp - e.hp; };
+    assert.equal(hit(s), hit(plain));
+  });
+}
+
+test('all three slots can be equipped at once', () => {
+  const s = make('knight', { skin: 'knight_arctic', cosmetics: { trail: 'trail_aurora', aura: 'aura_aurora', kill: 'kill_candy' } });
+  s.keys.up.isDown = true;
+  drive(s, 10);
+  assert.ok(s.auraParts.length === 12);
+});
+
+// ---------------- hidden Arctic wolf spider skin ----------------
+test('Arctic wolf spider skin: hidden until owned, not buyable, has its own art', () => {
+  const sp = SKINS.knight_arctic;
+  assert.equal(sp.character, 'knight'); assert.equal(sp.name, 'Arctic Wolf Spider'); assert.equal(sp.hidden, true); assert.equal(sp.source, 'secret');
+  assert.equal(isSkinVisible(sp, false), false, 'not shown in the collection when not owned');
+  assert.equal(isSkinVisible(sp, true), true);
+  for (const other of Object.values(SKINS)) if (other.id !== sp.id) assert.equal(isSkinVisible(other, false), true, `${other.id} stays visible`);
+  assert.equal(skinRows('knight', 'knight_arctic'), SKIN_ART.knight_arctic.rows);
+  assert.notEqual(skinRows('knight', 'knight_classic'), SKIN_ART.knight_arctic.rows);
+  assert.equal(skinRows('knight', null), SPRITES.knight.rows);
+  const R = SKIN_ART.knight_arctic.rows;
+  assert.equal(R.length, 12);
+  for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) {
+    assert.equal(R[y].length, 12);
+    if (R[y][x] === '.') continue;
+    assert.ok(SKIN_ART.knight_arctic.pal[R[y][x]], `palette for ${R[y][x]}`);
+    let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && R[y + dy]?.[x + dx] && R[y + dy][x + dx] !== '.') n++;
+    assert.ok(n > 0, `spider: floating pixel at ${x},${y}`);
+  }
+});
+
+test('the spider skin works in a run', () => {
+  const s = make('knight', { skin: 'knight_arctic' });
+  drive(s, 10);
+  assert.ok(s.run.kills > 0);
+});
+
+test('renamed: Candy Cane Elf', () => {
+  assert.equal(SKINS.elf_candy.name, 'Candy Cane Elf');
+  assert.equal(ADVENT_REWARDS[2].name, 'Candy Cane Elf');
+  for (const f of ['src/data/catalog.js', 'src/data/advent.js', 'README.md']) assert.ok(!fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8').includes('Candy Striper'), f);
+});
+
+test('the title screen has the splash text next to the logo', () => {
+  const home = fs.readFileSync(new URL('../src/pages/HomePage.jsx', import.meta.url), 'utf8');
+  assert.ok(home.includes('Play tester version'));
+  assert.ok(home.indexOf('className="logo"') < home.indexOf('className="splash"'));
+});
+
+test('demo backend: buying and equipping effects, and the secret skin', async () => {
+  await demo.resetAll();
+  await demo.signUp({ username: 'FxTester' });
+  await assert.rejects(() => demo.buy('cosmetic', 'trail_snow'), /Not enough coins/);
+  clock.set('2026-12-12T09:00:00Z');
+  for (let d = 1; d <= 12; d++) await demo.claimDay(d);            // 1350 coins
+  clock.set(null);
+  let me = await demo.getMe();
+  assert.equal(me.profile.coins, 1350);
+  await assert.rejects(() => demo.equipCosmetic('trail', 'trail_snow'), /not unlocked/);
+  await demo.buy('cosmetic', 'trail_snow'); await demo.buy('cosmetic', 'halo_holly'); await demo.buy('cosmetic', 'kill_confetti');
+  await assert.rejects(() => demo.buy('cosmetic', 'trail_snow'), /already own/);
+  me = await demo.getMe();
+  assert.equal(me.profile.coins, 1350 - 300 - 400 - 350);
+  await assert.rejects(() => demo.equipCosmetic('aura', 'trail_snow'), /slot/);
+  await assert.rejects(() => demo.equipCosmetic('sideways', 'trail_snow'), /slot/);
+  await demo.equipCosmetic('trail', 'trail_snow'); await demo.equipCosmetic('aura', 'halo_holly'); await demo.equipCosmetic('kill', 'kill_confetti');
+  assert.deepEqual((await demo.startRun('santa')).cosmetics, { trail: 'trail_snow', aura: 'halo_holly', kill: 'kill_confetti' });
+  await demo.equipCosmetic('aura', null);
+  assert.deepEqual((await demo.startRun('santa')).cosmetics, { trail: 'trail_snow', kill: 'kill_confetti' });
+  // the secret skin cannot be bought or equipped until it is granted
+  await assert.rejects(() => demo.buy('skin', 'knight_arctic'), /cannot be bought/);
+  await assert.rejects(() => demo.select({ character: 'knight', skin: 'knight_arctic' }), /not unlocked/);
+  assert.ok(!me.inventory.some((i) => i.item_id === 'knight_arctic'));
+  await demo.grantOwner();
+  me = await demo.getMe();
+  assert.ok(me.inventory.some((i) => i.item_id === 'knight_arctic'));
+  await demo.select({ character: 'knight', skin: 'knight_arctic' });
+  assert.equal((await demo.getMe()).profile.equipped.knight, 'knight_arctic');
+  await demo.resetAll();
 });

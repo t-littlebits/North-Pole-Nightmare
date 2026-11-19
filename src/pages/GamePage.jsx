@@ -40,15 +40,15 @@ export default function GamePage() {
   async function start() {
     setStarting(true);
     try {
-      let runId = null, used = null, loadout = {};
+      let runId = null, used = null, loadout = {}, cosmetics = {};
       const arena = randomArena();   // a different arena every run
       if (user) {
         backend.select({ character, skin: chosenSkin }).catch(() => {});
         const r = await backend.startRun(character);
-        runId = r.runId; used = r.boost; loadout = r.loadout || {};
+        runId = r.runId; used = r.boost; loadout = r.loadout || {}; cosmetics = r.cosmetics || {};
         refresh();
       }
-      setCfg({ character, arena, loadout, skin: chosenSkin, boost: used, unlockedWeapons: Object.keys(WEAPONS).filter((w) => owns('weapon', w)), runId });
+      setCfg({ character, arena, loadout, cosmetics, skin: chosenSkin, boost: used, unlockedWeapons: Object.keys(WEAPONS).filter((w) => owns('weapon', w)), runId });
       setPhase('playing');
       startMusic();
     } catch (e) { showToast(e.message, 'err'); }
@@ -189,7 +189,7 @@ function Playing({ cfg, onOver, onQuit }) {
         {levelup && (
           <div className="overlay">
             <h2>Level up! Choose a gift</h2>
-            {levelup.cards.some((c) => c.kind === 'finisher') && <p className="muted center-text">Some upgrades are maxed out. Finishing touches are cosmetic, or a small refill.</p>}
+            {levelup.cards.some((c) => c.kind === 'finisher') && <p className="muted center-text">Some upgrades are maxed out, so a cocoa refill takes their place.</p>}
             <div className="cards">
               {levelup.cards.map((c, i) => (
                 <button key={`${c.id}${i}`} className={`card r-${c.rarity} ${c.kind === 'finisher' ? 'finisher' : ''}`} onClick={() => bus.emit('ui:pick', i)}>

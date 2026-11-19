@@ -88,6 +88,7 @@ export const online = {
   select: ({ character, skin }) => call('inventory', { action: 'select', character, skin }),
   setBoost: (id) => call('inventory', { action: 'boost', id }),
   equipTitle: (id) => call('inventory', { action: 'title', id }),
+  equipCosmetic: (slot, id) => call('inventory', { action: 'cosmetic', slot, id }),
   equipLoadout: (weapon, mods) => call('inventory', { action: 'loadout', weapon, mods }),
   buyModCrate: () => call('inventory', { action: 'crate' }),
   sendFeedback: ({ kind, message }) => call('send-feedback', { kind, message, page: window.location.pathname }),

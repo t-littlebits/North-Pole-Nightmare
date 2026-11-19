@@ -170,3 +170,9 @@ textarea { font: inherit; background: var(--night); color: var(--snow); border: 
 
 /* finishing touches (what you pick once upgrades are maxed) */
 .card.finisher { background: #1d3a4a; } .card.finisher small { color: var(--ice); }
+
+/* title splash text (Minecraft-style): sits at the bottom-right of the logo, tilted, pulsing */
+.logo-wrap { position: relative; display: inline-block; margin: 6px 0 14px; } .logo-wrap .logo { margin: 0; }
+.splash { position: absolute; right: -4%; bottom: -16px; z-index: 2; pointer-events: none; white-space: nowrap; color: #ffff55; font-family: var(--font-px); font-size: clamp(9px, 2.2vw, 17px); text-shadow: 2px 2px 0 #3f3f15; transform: rotate(-18deg); animation: splash .8s ease-in-out infinite alternate; }
+@keyframes splash { from { transform: rotate(-18deg) scale(.94); } to { transform: rotate(-18deg) scale(1.06); } }
+@media (max-width: 600px) { .splash { right: 0; bottom: -20px; } }

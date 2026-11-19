@@ -4,6 +4,7 @@ import { rollUpgrades, applyUpgrade } from '../../data/upgrades.js';
 import { ENEMY_CAP, spawnInterval, spawnCount, computeScore, enemyHpScale, enemyDmgScale } from '../../shared/rules.js';
 import { ARENAS } from '../../data/arenas.js';
 import { sanitizeLoadout } from '../../data/mods.js';
+import { sanitizeCosmetics } from '../../data/cosmetics.js';
 import { buildTextures } from '../textures.js';
 import { bus } from '../bus.js';
 import { sfx, setMusicMode } from '../audio.js';
@@ -15,6 +16,26 @@ const WORLD_W = 2400;
 const WORLD_H = 1800;
 const FONT = '"Press Start 2P", monospace';
 const xpNeeded = (lvl) => Math.floor(5 + lvl * 3 + lvl * lvl * 0.5);
+
+// Cosmetic effects (bought with coins). Visual only.
+const TRAILS = {
+  trail_snow: { tex: 'flake', tints: [0xffffff, 0xdff3ff] },
+  trail_stars: { tex: 'spark', tints: [0xffd166, 0xfff6b0] },
+  trail_candy: { tex: 'bit', tints: [0xe63946, 0xffffff] },
+  trail_holly: { tex: 'bit', tints: [0x35c27a, 0xe63946, 0x1f6f4a] },
+  trail_aurora: { tex: 'spark', tints: [0x35e6a8, 0x6fb7ff, 0xb98cff, 0xff7ab8] }
+};
+const AURAS = {
+  halo_holly: { type: 'orbit', n: 8, rx: 36, ry: 18, speed: 650, size: 3.5, colors: [0x35c27a, 0xe63946] },
+  aura_stars: { type: 'orbit', n: 3, rx: 40, ry: 20, speed: 520, size: 5, colors: [0xffd166] },
+  aura_aurora: { type: 'orbit', n: 12, rx: 42, ry: 22, speed: 800, size: 3, colors: [0x35e6a8, 0x6fb7ff, 0xb98cff] },
+  aura_frost: { type: 'ring', color: 0x9fe6ff }
+};
+const KILLS = {
+  kill_confetti: { colors: [0xe63946, 0xffcf4a, 0x35c27a, 0x6fb7ff, 0xff7ab8], extra: 4 },
+  kill_snow: { colors: [0xffffff, 0xdff3ff], extra: 5 },
+  kill_candy: { colors: [0xe63946, 0xffffff, 0xff7ab8, 0xffcf4a], extra: 4 }
+};
 
 // Red Nose Beam: reaches past the screen edge and whips around exactly twice.
 const BEAM_LEN = 1300;
@@ -72,7 +93,8 @@ export default class GameScene extends Phaser.Scene {
     this.stats.hp = this.stats.maxHp;
     // Starting values: stat upgrades are capped relative to these.
     this.stats.base = { maxHp: this.stats.maxHp, speed: this.stats.speed, atk: 1, dmg: 1, pickup: this.stats.pickup, xpMult: this.stats.xpMult };
-    this.cosmetics = new Set(); this.trailAt = 0; this.halo = null;
+    this.fx = sanitizeCosmetics(cfg.cosmetics);   // equipped cosmetic effects: {trail, aura, kill}
+    this.trailAt = 0; this.auraParts = null; this.auraRing = null;
     this.shield = boost === 'shield_boost' ? 50 : 0;
     this.shieldUntil = Infinity;
     this.weapons = { [ch.weapon]: 1 };
@@ -309,8 +331,8 @@ export default class GameScene extends Phaser.Scene {
       this.dropGem(e.x, e.y, def.xp * (e.elite ? 4 : 1));
       if (e.elite && Math.random() < 0.3) this.spawnPresent(e.x, e.y);
     }
-    const confetti = this.cosmetics.has('confetti');
-    this.burst(e.x, e.y, confetti ? Phaser.Utils.Array.GetRandom([0xe63946, 0xffcf4a, 0x35c27a, 0x6fb7ff, 0xff7ab8]) : (e.elite || e.boss ? 0xffd166 : 0xffffff), (e.boss ? 18 : 5) + (confetti ? 4 : 0));
+    const kfx = KILLS[this.fx.kill];
+    this.burst(e.x, e.y, kfx ? Phaser.Utils.Array.GetRandom(kfx.colors) : (e.elite || e.boss ? 0xffd166 : 0xffffff), (e.boss ? 18 : 5) + (kfx ? kfx.extra : 0));
     sfx('kill');
     e.destroy();
   }
@@ -900,9 +922,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   startLevelUp() {
-    const cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available, stats: this.stats, cosmetics: this.cosmetics });
+    const cards = rollUpgrades({ wave: this.run.wave, luck: this.stats.luck, weapons: this.weapons, available: this.available, stats: this.stats });
     if (cards.length === 1 && cards[0].auto) {          // everything is maxed: a quick refill instead of a menu
-      applyUpgrade(cards[0], this.stats, this.weapons, this.cosmetics);
+      applyUpgrade(cards[0], this.stats, this.weapons);
       this.popText(this.player.x, this.player.y - 30, 'COCOA REFILL', '#9be7ff');
       sfx('gem');
       this.pendingLevels -= 1;
@@ -918,7 +940,7 @@ export default class GameScene extends Phaser.Scene {
 
   chooseUpgrade(i) {
     if (!this.cards.length || !this.cards[i]) return;
-    applyUpgrade(this.cards[i], this.stats, this.weapons, this.cosmetics);
+    applyUpgrade(this.cards[i], this.stats, this.weapons);
     this.cards = [];
     this.pendingLevels -= 1;
     if (this.pendingLevels > 0) this.startLevelUp();
@@ -1069,19 +1091,20 @@ export default class GameScene extends Phaser.Scene {
     const px = this.player.x, py = this.player.y, now = this.runMs;
     this.bossTint.setAlpha(this.bossFight() ? 0.1 + 0.04 * Math.sin(now / 300) : 0);
 
-    if (this.cosmetics.size) {            // finishing touches: purely visual
-      const moving = Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y) > 20;
-      const stars = this.cosmetics.has('trail_stars'), snow = this.cosmetics.has('trail_snow');
-      if ((stars || snow) && moving && now >= this.trailAt) {
-        this.trailAt = now + 70;
-        const b = this.add.image(px + Phaser.Math.Between(-6, 6), py + 14, stars ? 'spark' : 'flake').setDepth(py - 1);
-        if (stars) b.setTint(0xffd166);
-        this.tweens.add({ targets: b, alpha: 0, y: b.y + 16, duration: 650, onComplete: () => b.destroy() });
-      }
-      if (this.cosmetics.has('halo')) {
-        if (!this.halo) this.halo = Array.from({ length: 8 }, (_, i) => this.add.circle(0, 0, 3.5, i % 2 ? 0xe63946 : 0x35c27a));
-        this.halo.forEach((c, i) => { const a = now / 650 + (i * Math.PI) / 4; c.setPosition(px + Math.cos(a) * 36, py + Math.sin(a) * 18).setDepth(py + (Math.sin(a) > 0 ? 2 : -2)); });
-      }
+    const tr = TRAILS[this.fx.trail];
+    if (tr && now >= this.trailAt && Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y) > 20) {
+      this.trailAt = now + 70;
+      const b = this.add.image(px + Phaser.Math.Between(-6, 6), py + 14, tr.tex).setDepth(py - 1).setTint(Phaser.Utils.Array.GetRandom(tr.tints));
+      this.tweens.add({ targets: b, alpha: 0, y: b.y + 16, duration: 650, onComplete: () => b.destroy() });
+    }
+    const au = AURAS[this.fx.aura];
+    if (au && au.type === 'orbit') {
+      if (!this.auraParts) this.auraParts = Array.from({ length: au.n }, (_, i) => this.add.circle(0, 0, au.size, au.colors[i % au.colors.length]));
+      this.auraParts.forEach((c, i) => { const a = now / au.speed + (i * Math.PI * 2) / au.n; c.setPosition(px + Math.cos(a) * au.rx, py + Math.sin(a) * au.ry).setDepth(py + (Math.sin(a) > 0 ? 2 : -2)); });
+    } else if (au) {
+      if (!this.auraRing) this.auraRing = this.add.circle(0, 0, 30, au.color, 0.12).setStrokeStyle(2, 0xdff3ff, 0.7);
+      const pulse = 1 + 0.08 * Math.sin(now / 260);
+      this.auraRing.setPosition(px, py + 12).setDepth(py - 2).setScale(pulse, pulse * 0.55);
     }
 
     if (this.delayed.length) {
