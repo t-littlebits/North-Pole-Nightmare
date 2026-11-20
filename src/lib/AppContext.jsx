@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createRunner } from './actionRunner.js';
 import { backend, isDemo } from './backend/index.js';
 import { getSettings, saveSettings, subscribeSettings } from './settings.js';
 import { DEFAULT_WEAPONS, defaultSkinFor, CHARACTER_IDS } from '../data/catalog.js';   // heroes and weapons are free for everyone
@@ -47,18 +48,13 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast((t) => (t && Date.now() - t.id >= 2800 ? null : t)), 3000);
   }, []);
 
-  /** Runs a backend action, refreshes the profile and reports errors as a toast. */
-  const act = useCallback(async (fn, okMsg) => {
-    try {
-      const r = await fn();
-      await refresh();
-      if (okMsg) showToast(okMsg, 'ok');
-      return r;
-    } catch (e) {
-      showToast(e.message || 'Something went wrong', 'err');
-      return null;
-    }
-  }, [refresh, showToast]);
+  // Actions (buy, equip...) show instantly and reconcile with the server afterwards: see lib/actionRunner.js
+  const [pending, setPending] = useState({});
+  const runner = useRef(null);
+  if (!runner.current) runner.current = createRunner({ refresh, setMe, setPending, showToast });
+  const act = runner.current;
+  const isPending = useCallback((key) => !!pending[key], [pending]);
+  const busy = Object.keys(pending).length > 0;
 
   const setSetting = useCallback((patch) => {
     const next = saveSettings(patch);
@@ -67,7 +63,7 @@ export function AppProvider({ children }) {
 
   const value = {
     ready, isDemo, user: me?.user || null, profile: me?.profile || null, inventory: me?.inventory || [], claims: me?.claims || [],
-    titles: me?.titles || [], refresh, owns, skinFor, settings, setSetting, authOpen, setAuthOpen, toast, showToast, act
+    titles: me?.titles || [], refresh, owns, skinFor, settings, setSetting, authOpen, setAuthOpen, toast, showToast, act, isPending, busy
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

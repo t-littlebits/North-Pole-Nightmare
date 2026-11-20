@@ -9,6 +9,9 @@ import { TITLES, titleProgress } from '../data/titles.js';
 import { COSMETIC_LIST, COSMETIC_SLOTS, SLOT_NAMES } from '../data/cosmetics.js';
 import { isSkinVisible } from '../data/catalog.js';
 import TitleTag from '../components/TitleTag.jsx';
+import ActionButton from '../components/ActionButton.jsx';
+import { optimistic } from '../lib/optimistic.js';
+import { affordable, isLit } from '../lib/shop.js';
 import { MODS, MOD_LIST, MAX_SLOTS, MOD_CRATE_PRICE, PRESENT_MOD_RATE, canEquip, modFits } from '../data/mods.js';
 
 const adventDay = {};
@@ -16,11 +19,22 @@ ADVENT_REWARDS.forEach((r) => r.grants.forEach((g) => { adventDay[`${g.type}:${g
 const TABS = ['Heroes', 'Skins', 'Effects', 'Weapons', 'Mods', 'Boosts', 'Titles'];
 
 export default function CollectionPage() {
-  const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims, inventory, showToast } = useApp();
+  const { user, profile, owns, skinFor, act, setAuthOpen, titles, claims, inventory, showToast, isPending } = useApp();
   const [tab, setTab] = useState('Heroes');
   const needAuth = () => { if (!user) { setAuthOpen(true); return true; } return false; };
-  const buy = (type, id, name) => { if (!needAuth()) act(() => backend.buy(type, id), `Unlocked ${name}!`); };
-  const select = (args, msg) => { if (!needAuth()) act(() => backend.select(args), msg); };
+  // Everything below updates the screen immediately and confirms with the server in the background (see lib/actionRunner.js).
+  const coins = profile?.coins ?? 0;
+  const canAfford = (price) => affordable(!!user, coins, price);
+  const lit = (has, price) => isLit(has, !!user, coins, price);   // owned, or not owned yet but affordable: both are lit up
+  const itemKey = (type, id) => `item:${type}:${id}`;
+  const saving = (type, id) => (isPending(itemKey(type, id)) ? 'saving' : '');
+  const buy = (type, id, name, price) => { if (!needAuth()) act(() => backend.buy(type, id), `Unlocked ${name}!`, { key: itemKey(type, id), optimistic: optimistic.buy(type, id, price) }); };
+  const select = (args, msg, key) => { if (!needAuth()) act(() => backend.select(args), msg, { key, optimistic: optimistic.select(args.character, args.skin) }); };
+  const equipCosmetic = (slot, c, equipped) => { if (!needAuth()) act(() => backend.equipCosmetic(slot, equipped ? null : c.id), equipped ? `${c.name} removed` : `${c.name} equipped`, { key: itemKey('cosmetic', c.id), optimistic: optimistic.cosmetic(slot, equipped ? null : c.id) }); };
+  const equipTitle = (t, equipped) => act(() => backend.equipTitle(equipped ? null : t.id), equipped ? 'Title removed' : 'Title equipped', { key: itemKey('title', t.id), optimistic: optimistic.title(equipped ? null : t.id) });
+  const BuyButton = ({ type, id, name, price }) => (
+    <ActionButton pending={isPending(itemKey(type, id))} pendingLabel="Buying…" disabled={!!user && !canAfford(price)} title={user && !canAfford(price) ? 'Not enough coins yet' : undefined} onClick={() => buy(type, id, name, price)}>Buy</ActionButton>
+  );
 
   const shownSkins = Object.values(SKINS).filter((s) => isSkinVisible(s, owns('skin', s.id)));   // secret skins stay hidden until you own them
   const total = CHARACTER_IDS.length + shownSkins.length + Object.keys(WEAPONS).length;
@@ -28,10 +42,10 @@ export default function CollectionPage() {
   const boosts = Object.entries(profile?.boosts || {}).filter(([, n]) => n > 0);
   const ownedMods = new Set(inventory.filter((i) => i.item_type === 'mod').map((i) => i.item_id));
   const loadout = profile?.loadout || {};
-  const setSlots = (weapon, list, msg) => { if (!needAuth()) act(() => backend.equipLoadout(weapon, list), msg); };
+  const setSlots = (weapon, list, msg) => { if (!needAuth()) act(() => backend.equipLoadout(weapon, list), msg, { key: `loadout:${weapon}`, optimistic: optimistic.loadout(weapon, list) }); };
   const openCrate = async () => {
     if (needAuth()) return;
-    const r = await act(() => backend.buyModCrate());
+    const r = await act(() => backend.buyModCrate(), null, { key: 'crate' });
     if (r?.mod) showToast(`Crate opened: ${MODS[r.mod].icon} ${MODS[r.mod].name}!`, 'ok');
   };
   const modSource = (id) => {
@@ -59,13 +73,13 @@ export default function CollectionPage() {
           {CHARACTER_IDS.map((id) => {
             const c = CHARACTERS[id], has = owns('character', id), sel = profile?.selected_character === id;
             return (
-              <div key={id} className={`panel item ${has ? '' : 'locked'}`}>
+              <div key={id} className={`panel item ${has ? '' : 'locked'} ${saving('character', id)}`}>
                 <Hero character={id} skin={skinFor(id)} px={8} />
                 <strong>{c.name}</strong>
                 <span className="muted small-text">HP {c.hp} · Speed {c.speed}</span>
                 <span className="small-text">{c.ability.name}: {c.ability.desc}</span>
-                {has ? <button className="btn small" disabled={sel} onClick={() => select({ character: id }, `${c.name} selected`)}>{sel ? 'Selected' : 'Select'}</button>
-                  : <><Source type="character" id={id} price={c.price} buyable /><button className="btn small" onClick={() => buy('character', id, c.name)}>Buy</button></>}
+                {has ? <ActionButton pending={isPending(itemKey('character', id))} pendingLabel="Saving…" disabled={sel} onClick={() => select({ character: id }, `${c.name} selected`, itemKey('character', id))}>{sel ? 'Selected' : 'Select'}</ActionButton>
+                  : <><Source type="character" id={id} price={c.price} buyable /><BuyButton type="character" id={id} name={c.name} price={c.price} /></>}
               </div>
             );
           })}
@@ -79,12 +93,12 @@ export default function CollectionPage() {
             {shownSkins.filter((s) => s.character === cid).map((s) => {
               const has = owns('skin', s.id), equipped = skinFor(cid) === s.id;
               return (
-                <div key={s.id} className={`panel item ${has ? '' : 'locked'}`} style={{ outlineColor: RARITIES[s.rarity].color }}>
+                <div key={s.id} className={`panel item ${lit(has, s.source === 'shop' ? s.price : Infinity) ? '' : 'locked'} ${saving('skin', s.id)}`} style={{ outlineColor: RARITIES[s.rarity].color }}>
                   <Hero character={cid} skin={s.id} px={7} />
                   <strong>{s.name}</strong>
                   <span className="small-text" style={{ color: RARITIES[s.rarity].color }}>{RARITIES[s.rarity].name}{s.source === 'advent' ? ' · exclusive' : ''}</span>
-                  {has ? <button className="btn small" disabled={equipped || !owns('character', cid)} onClick={() => select({ character: cid, skin: s.id }, `${s.name} equipped`)}>{equipped ? 'Equipped' : owns('character', cid) ? 'Equip' : 'Unlock hero first'}</button>
-                    : s.source === 'shop' ? <><Price price={s.price} /><button className="btn small" onClick={() => buy('skin', s.id, s.name)}>Buy</button></>
+                  {has ? <ActionButton pending={isPending(itemKey('skin', s.id))} pendingLabel="Saving…" disabled={equipped || !owns('character', cid)} onClick={() => select({ character: cid, skin: s.id }, `${s.name} equipped`, itemKey('skin', s.id))}>{equipped ? 'Equipped' : owns('character', cid) ? 'Equip' : 'Unlock hero first'}</ActionButton>
+                    : s.source === 'shop' ? <><Price price={s.price} /><BuyButton type="skin" id={s.id} name={s.name} price={s.price} /></>
                       : <Source type="skin" id={s.id} />}
                 </div>
               );
@@ -103,13 +117,13 @@ export default function CollectionPage() {
                 {COSMETIC_LIST.filter((c) => c.slot === slot).map((c) => {
                   const has = owns('cosmetic', c.id), eq = profile?.cosmetics?.[slot] === c.id;
                   return (
-                    <div key={c.id} className={`panel item ${has ? '' : 'locked'}`}>
+                    <div key={c.id} className={`panel item ${lit(has, c.price) ? '' : 'locked'} ${saving('cosmetic', c.id)}`}>
                       <span className="emoji big">{c.icon}</span>
                       <strong>{c.name}</strong>
                       <span className="small-text" style={{ color: RARITIES[c.rarity].color }}>{RARITIES[c.rarity].name}</span>
                       <span className="small-text">{c.desc}</span>
-                      {has ? <button className="btn small" onClick={() => { if (!needAuth()) act(() => backend.equipCosmetic(slot, eq ? null : c.id), eq ? `${c.name} removed` : `${c.name} equipped`); }}>{eq ? 'Remove' : 'Equip'}</button>
-                        : <><Price price={c.price} /><button className="btn small" onClick={() => buy('cosmetic', c.id, c.name)}>Buy</button></>}
+                      {has ? <ActionButton pending={isPending(itemKey('cosmetic', c.id))} pendingLabel="Saving…" onClick={() => equipCosmetic(slot, c, eq)}>{eq ? 'Remove' : 'Equip'}</ActionButton>
+                        : <><Price price={c.price} /><BuyButton type="cosmetic" id={c.id} name={c.name} price={c.price} /></>}
                     </div>
                   );
                 })}
@@ -129,7 +143,7 @@ export default function CollectionPage() {
                 <strong>{w.name}</strong>
                 <span className="small-text">{w.blurb}</span>
                 {has ? <span className="ok">Unlocked: can appear as an upgrade</span>
-                  : <><Source type="weapon" id={w.id} price={w.price} buyable /><button className="btn small" onClick={() => buy('weapon', w.id, w.name)}>Buy</button></>}
+                  : <><Source type="weapon" id={w.id} price={w.price} buyable /><BuyButton type="weapon" id={w.id} name={w.name} price={w.price} /></>}
               </div>
             );
           })}
@@ -140,7 +154,7 @@ export default function CollectionPage() {
         <>
           <p className="muted">Each weapon has {MAX_SLOTS} mod slots. Mods change how a weapon behaves (knockbacks, slows, bounces, echoes...) but never add damage, attack speed or XP. Earn most of them from titles. The rest come from the advent calendar, and those can also turn up in mystery presents (about {Math.round(PRESENT_MOD_RATE * 100)}% each, revealed after your run) or a crate. Mods that a title can award are never found by luck.</p>
           <div className="panel row">
-            <button className="btn" onClick={openCrate}>Open a Mod Crate · 🪙 {MOD_CRATE_PRICE}</button>
+            <ActionButton className="btn" pending={isPending('crate')} pendingLabel="Opening crate…" disabled={!!user && coins < MOD_CRATE_PRICE} title={user && coins < MOD_CRATE_PRICE ? 'Not enough coins yet' : undefined} onClick={openCrate}>Open a Mod Crate · 🪙 {MOD_CRATE_PRICE}</ActionButton>
             <span className="muted">A random mod you do not own yet.</span>
           </div>
           {Object.values(WEAPONS).filter((w) => owns('weapon', w.id)).map((w) => {
@@ -153,12 +167,12 @@ export default function CollectionPage() {
                   {Array.from({ length: MAX_SLOTS }, (_, i) => {
                     const id = eq[i];
                     return id
-                      ? <button key={i} className="slot filled" title="Click to remove" onClick={() => setSlots(w.id, eq.filter((x) => x !== id), `${MODS[id].name} removed`)}>{MODS[id].icon} {MODS[id].name} ✕</button>
+                      ? <button key={i} className="slot filled" title="Click to remove" disabled={isPending(`loadout:${w.id}`)} onClick={() => setSlots(w.id, eq.filter((x) => x !== id), `${MODS[id].name} removed`)}>{MODS[id].icon} {MODS[id].name} ✕</button>
                       : <span key={i} className="slot">Empty slot</span>;
                   })}
                 </div>
                 <div className="chips">
-                  {avail.map((m) => <button key={m.id} className="chip" disabled={eq.length >= MAX_SLOTS} title={m.desc} onClick={() => setSlots(w.id, [...eq, m.id], `${m.name} equipped`)}>{m.icon} {m.name}</button>)}
+                  {avail.map((m) => <button key={m.id} className="chip" disabled={eq.length >= MAX_SLOTS || isPending(`loadout:${w.id}`)} title={m.desc} onClick={() => setSlots(w.id, [...eq, m.id], `${m.name} equipped`)}>{m.icon} {m.name}</button>)}
                   {!avail.length && <span className="muted small-text">No other mods to equip here yet.</span>}
                 </div>
               </div>
@@ -191,11 +205,11 @@ export default function CollectionPage() {
               const has = titles.includes(t.id), equipped = profile?.equipped_title === t.id;
               const [cur, target] = titleProgress(t, stats);
               return (
-                <div key={t.id} className={`panel item ${has ? '' : 'locked'}`}>
+                <div key={t.id} className={`panel item ${has ? '' : 'locked'} ${saving('title', t.id)}`}>
                   <TitleTag id={t.id} />
                   <span className="small-text">{t.desc}</span>
                   {t.mod && <span className="small-text gold">Reward: {MODS[t.mod].icon} {MODS[t.mod].name} mod</span>}
-                  {has ? <button className="btn small" onClick={() => act(() => backend.equipTitle(equipped ? null : t.id), equipped ? 'Title removed' : 'Title equipped')}>{equipped ? 'Remove' : 'Equip'}</button>
+                  {has ? <ActionButton pending={isPending(itemKey('title', t.id))} pendingLabel="Saving…" onClick={() => equipTitle(t, equipped)}>{equipped ? 'Remove' : 'Equip'}</ActionButton>
                     : <div className="progress" aria-label={`${cur} of ${target}`}><i style={{ width: `${(cur / target) * 100}%` }} /><span>{cur.toLocaleString()} / {target.toLocaleString()}</span></div>}
                 </div>
               );

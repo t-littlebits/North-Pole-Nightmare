@@ -176,3 +176,12 @@ textarea { font: inherit; background: var(--night); color: var(--snow); border: 
 .splash { position: absolute; right: -4%; bottom: -16px; z-index: 2; pointer-events: none; white-space: nowrap; color: #ffff55; font-family: var(--font-px); font-size: clamp(9px, 2.2vw, 17px); text-shadow: 2px 2px 0 #3f3f15; transform: rotate(-18deg); animation: splash .8s ease-in-out infinite alternate; }
 @keyframes splash { from { transform: rotate(-18deg) scale(.94); } to { transform: rotate(-18deg) scale(1.06); } }
 @media (max-width: 600px) { .splash { right: 0; bottom: -20px; } }
+
+/* pending actions: spinner buttons, a saving bar, and a pulse on the item being saved */
+.btn.pending { cursor: progress; opacity: 1; filter: brightness(.9); }
+.spin { display: inline-block; width: 8px; height: 8px; margin-right: 8px; background: currentColor; animation: spin .7s steps(4) infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.busy-bar { position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 90; overflow: hidden; background: rgba(255,255,255,.12); }
+.busy-bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 30%; background: repeating-linear-gradient(135deg, var(--candy) 0 8px, #fff 8px 16px); animation: busy 1s steps(10) infinite; }
+@keyframes busy { from { left: -30%; } to { left: 100%; } }
+.item.saving { animation: blink .8s steps(2) infinite; }

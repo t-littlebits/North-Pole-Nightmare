@@ -74,6 +74,12 @@ select public.grant_item('PlayerName', 'skin', 'knight_arctic');
 ```
   The same function can grant any item (`'character'`, `'skin'`, `'weapon'`, `'mod'`, `'cosmetic'`). In demo mode the Settings button grants it locally.
 
+## If actions feel slow
+Buying and equipping call a Netlify Function, which makes a few Supabase queries, so latency adds up when the two are far apart.
+- **Put them in the same region:** Netlify → Site configuration → Functions → *Region*, and pick the one closest to your Supabase project's region (shown in Supabase → Project Settings). This is usually the biggest win (seconds down to a fraction of a second).
+- The first call after a quiet spell is slower (a "cold start"). That is normal for serverless functions.
+- The page already hides most of the wait: buttons switch to a spinner immediately, equips and purchases show on screen straight away and are rolled back if the server refuses (`src/lib/actionRunner.js`, `src/lib/optimistic.js`), and a candy-cane bar runs across the top while anything is saving.
+
 ## How security works
 
 - Browsers can **read** public data (leaderboard, public profiles) and their own rows. They can **not** write scores, coins, inventory, boosts or advent claims: row-level security has no write policies for those tables.

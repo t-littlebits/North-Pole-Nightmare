@@ -7,10 +7,11 @@ import AuthModal from './AuthModal.jsx';
 const LINKS = [['/', 'Home'], ['/play', 'Play'], ['/advent', 'Advent'], ['/leaderboard', 'Ranks'], ['/collection', 'Collection'], ['/players', 'Players'], ['/settings', 'Settings']];
 
 export default function Layout() {
-  const { user, profile, isDemo, setAuthOpen, toast, ready } = useApp();
+  const { user, profile, isDemo, setAuthOpen, toast, ready, busy } = useApp();
   return (
     <div className="shell">
       <Snow />
+      {busy && <div className="busy-bar" role="progressbar" aria-label="Saving" />}
       <header className="topbar">
         <Link to="/" className="brand" aria-label="North Pole Nightmare home">
           <span className="brand-a">NORTH POLE</span><span className="brand-b">NIGHTMARE</span>

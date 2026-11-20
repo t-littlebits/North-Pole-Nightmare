@@ -9,6 +9,7 @@ import { startMusic, stopMusic, sfx } from '../game/audio.js';
 import { CHARACTERS, CHARACTER_IDS, SKINS, WEAPONS, BOOSTS, RARITIES } from '../data/catalog.js';
 import { Hero, WeaponIcon } from '../components/Sprite.jsx';
 import TitleTag from '../components/TitleTag.jsx';
+import { optimistic } from '../lib/optimistic.js';
 import { ARENAS, randomArena } from '../data/arenas.js';
 import { MODS } from '../data/mods.js';
 import { TITLE_BY_ID } from '../data/titles.js';
@@ -16,7 +17,7 @@ import { TITLE_BY_ID } from '../data/titles.js';
 
 export default function GamePage() {
   const app = useApp();
-  const { user, profile, owns, skinFor, showToast, refresh, ready, setAuthOpen } = app;
+  const { user, profile, owns, skinFor, showToast, refresh, ready, setAuthOpen, act, isPending } = app;
   const [phase, setPhase] = useState('menu');
   const [character, setCharacter] = useState('santa');
   const [skin, setSkin] = useState(null);
@@ -57,7 +58,8 @@ export default function GamePage() {
 
   async function pickBoost(id) {
     if (!user) return;
-    try { await backend.setBoost(profile.active_boost === id ? null : id); await refresh(); } catch (e) { showToast(e.message, 'err'); }
+    const next = profile.active_boost === id ? null : id;
+    act(() => backend.setBoost(next), null, { key: `boost:${id}`, optimistic: optimistic.boost(next) });
   }
 
   if (phase === 'playing') return <Playing cfg={cfg} onOver={(r) => { stopMusic(); setResult(r); setPhase('over'); }} onQuit={() => { stopMusic(); setPhase('menu'); refresh(); }} />;
@@ -93,7 +95,7 @@ export default function GamePage() {
         {boosts.length > 0 && (
           <div className="chips" aria-label="Boosts">
             <span className="muted">Boost for this run:</span>
-            {boosts.map(([id, n]) => <button key={id} className={`chip ${profile.active_boost === id ? 'on' : ''}`} onClick={() => pickBoost(id)} title={BOOSTS[id]?.desc}>{BOOSTS[id]?.icon} {BOOSTS[id]?.name} ×{n}</button>)}
+            {boosts.map(([id, n]) => <button key={id} className={`chip ${profile.active_boost === id ? 'on' : ''}`} disabled={isPending(`boost:${id}`)} onClick={() => pickBoost(id)} title={BOOSTS[id]?.desc}>{BOOSTS[id]?.icon} {BOOSTS[id]?.name} ×{n}</button>)}
           </div>
         )}
       </div>
