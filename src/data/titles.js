@@ -22,8 +22,8 @@ export const TITLES = [
   { id: 'calendar_complete', name: 'Calendar Completionist', rarity: 'epic', desc: 'Claim all 24 doors of an advent calendar.', stat: 'advent_claims', target: 24 },
   { id: 'full_sleigh', name: 'Sleigh Rider', rarity: 'epic', desc: 'Reach wave 15.', stat: 'best_wave', target: 15 },
   { id: 'fashionista', name: 'Fashionista', rarity: 'rare', desc: 'Own 10 skins.', stat: 'skins_owned', target: 10 },
-  { id: 'founder', name: 'Founder', rarity: 'epic', desc: 'Played in the earliest days. Granted by hand.', manual: true },
-  { id: 'owner', name: 'Owner', rarity: 'owner', desc: 'Built this place. Granted by hand.', manual: true }
+  { id: 'founder', name: 'Founder', rarity: 'epic', desc: 'An OG player', manual: true },
+  { id: 'owner', name: 'Owner', rarity: 'owner', desc: 'I am PancakeTheory', manual: true }
 ];
 export const TITLE_BY_ID = Object.fromEntries(TITLES.map((t) => [t.id, t]));
 
