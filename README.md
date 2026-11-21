@@ -57,6 +57,9 @@ New installs get everything from `schema.sql`. If you installed earlier, run the
 2. `supabase/update-3-mods-feedback.sql` (equippable weapon mods and the feedback table).
 3. `supabase/update-4-free-heroes.sql` (heroes are free, so a run no longer needs an inventory row for the hero).
 4. `supabase/update-5-effects-secret-skin.sql` (coin-bought cosmetic effects and the `grant_item` helper).
+5. `supabase/update-6-fast-actions.sql`, **then** `supabase/catalog.sql` (fast shop/equip actions, see below).
+
+Fresh install: run `schema.sql`, then `catalog.sql`.
 
 ## Giving yourself the Owner title
 Titles that are earned in-game (kills, waves, bosses, advent, collection...) unlock automatically. Manual titles (`owner`, `founder`) can only be granted from the Supabase SQL Editor, which nobody else can reach:
@@ -74,11 +77,12 @@ select public.grant_item('PlayerName', 'skin', 'knight_arctic');
 ```
   The same function can grant any item (`'character'`, `'skin'`, `'weapon'`, `'mod'`, `'cosmetic'`). In demo mode the Settings button grants it locally.
 
-## If actions feel slow
-Buying and equipping call a Netlify Function, which makes a few Supabase queries, so latency adds up when the two are far apart.
-- **Put them in the same region:** Netlify → Site configuration → Functions → *Region*, and pick the one closest to your Supabase project's region (shown in Supabase → Project Settings). This is usually the biggest win (seconds down to a fraction of a second).
-- The first call after a quiet spell is slower (a "cold start"). That is normal for serverless functions.
-- The page already hides most of the wait: buttons switch to a spinner immediately, equips and purchases show on screen straight away and are rolled back if the server refuses (`src/lib/actionRunner.js`, `src/lib/optimistic.js`), and a candy-cane bar runs across the top while anything is saving.
+## Fast actions (why buying and equipping are quick)
+Netlify Functions can be stuck in one region (e.g. Ohio) while Supabase and your players are elsewhere (e.g. Germany and the UK), so every click used to cross the Atlantic several times. The shop and equip actions (buy, equip skin/effect/mod/title, boost, Mod Crate, start run) are now **Postgres functions called straight from the browser**: one round trip to Supabase, no cold starts, no Netlify detour. They identify the player with `auth.uid()` (never a parameter) and read prices and compatibility from a `catalog_items` table that is generated from the game's own data files.
+- Set up: run `supabase/update-6-fast-actions.sql`, then `supabase/catalog.sql`. Until both are run the game keeps working through the Netlify functions (automatic fallback), just more slowly.
+- After adding or changing any item, price or mod: `npm run gen:catalog` and run the new `supabase/catalog.sql` again. A test fails if the committed file is out of date.
+- Still on Netlify (they need the shared JavaScript rules, and happen once per run or day): submitting a score, claiming an advent door, sending feedback. Buying a skin no longer checks for the *Fashionista* title instantly; it is awarded after your next run.
+- The page also hides the wait: buttons show a spinner immediately, equips and purchases appear on screen straight away and roll back if refused (`src/lib/actionRunner.js`, `src/lib/optimistic.js`), and a candy-cane bar runs across the top while anything is saving.
 
 ## How security works
 

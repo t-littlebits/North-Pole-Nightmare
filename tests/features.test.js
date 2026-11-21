@@ -476,8 +476,8 @@ test('balance: armor and regeneration are capped, level-up heal is small', () =>
   for (let i = 0; i < 30; i++) { applyUpgrade({ kind: 'stat', id: 'armor', mult: 4 }, stats, {}); applyUpgrade({ kind: 'stat', id: 'regen', mult: 4 }, stats, {}); }
   assert.equal(stats.armor, 5); assert.equal(stats.regen, 2.5);
   const s = make('santa'); s.stats.hp = 50;
-  s.startLevelUp(); s.chooseUpgrade(0);
-  assert.ok(Math.abs(s.stats.hp - (50 + s.stats.maxHp * 0.05)) < 1e-6 || s.stats.hp <= 50 + s.stats.maxHp * 0.1 + 12);
+  s.startLevelUp();     // before any card is picked: only the small built-in heal has been applied
+  assert.ok(Math.abs(s.stats.hp - (50 + s.stats.maxHp * 0.05)) < 1e-6, 'a level-up heals 5% of max HP');
 });
 
 // ---------------- ranged enemy ----------------

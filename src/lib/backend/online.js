@@ -2,6 +2,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { adventYear } from '../../shared/rules.js';
 import { USERNAME_RE } from '../../shared/rules.js';
+import { sanitizeLoadout } from '../../data/mods.js';
+import { sanitizeCosmetics } from '../../data/cosmetics.js';
+import { createRpc } from './rpc.js';
 
 const cleanUrl = (v) => (v ? v.trim().replace(/\/(rest|auth)\/v1\/?$/, '').replace(/\/+$/, '') : v);
 const url = cleanUrl(import.meta.env.VITE_SUPABASE_URL);
@@ -9,6 +12,7 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const hasSupabase = Boolean(url && anon);
 export const supabase = hasSupabase ? createClient(url, anon) : null;
 
+const rpc = createRpc(supabase);   // null until Supabase is configured; only used by the signed-in online backend
 const esc = (s) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
 async function call(fn, body) {
@@ -68,7 +72,12 @@ export const online = {
     return { user: { id: user.id, username: p.data.username }, profile: p.data, inventory: inv.data || [], claims: cl.data || [], titles: (tt.data || []).map((t) => t.title_id) };
   },
 
-  startRun: (character) => call('start-run', { character }),
+  // Shop and equip actions call database functions directly (one round trip to Supabase, no detour through Netlify in the US).
+  // If those functions are not installed yet they fall back to the Netlify functions.
+  async startRun(character) {
+    const r = await rpc('start_run_me', { p_character: character }, () => call('start-run', { character }));
+    return { runId: r.runId ?? r.run_id, boost: r.boost ?? null, loadout: sanitizeLoadout(r.loadout), cosmetics: sanitizeCosmetics(r.cosmetics) };
+  },
   submitRun: (runId, stats) => call('submit-score', { runId, stats }),
 
   async getLeaderboard(limit = 50) {
@@ -84,13 +93,13 @@ export const online = {
   },
 
   claimDay: (day) => call('claim-reward', { day }),
-  buy: (type, id) => call('inventory', { action: 'buy', type, id }),
-  select: ({ character, skin }) => call('inventory', { action: 'select', character, skin }),
-  setBoost: (id) => call('inventory', { action: 'boost', id }),
-  equipTitle: (id) => call('inventory', { action: 'title', id }),
-  equipCosmetic: (slot, id) => call('inventory', { action: 'cosmetic', slot, id }),
-  equipLoadout: (weapon, mods) => call('inventory', { action: 'loadout', weapon, mods }),
-  buyModCrate: () => call('inventory', { action: 'crate' }),
+  buy: (type, id) => rpc('shop_buy', { p_type: type, p_id: id }, () => call('inventory', { action: 'buy', type, id })),
+  select: ({ character, skin }) => rpc('shop_equip_character', { p_character: character, p_skin: skin || null }, () => call('inventory', { action: 'select', character, skin })),
+  setBoost: (id) => rpc('shop_set_boost', { p_id: id || null }, () => call('inventory', { action: 'boost', id })),
+  equipTitle: (id) => rpc('shop_equip_title', { p_id: id || null }, () => call('inventory', { action: 'title', id })),
+  equipCosmetic: (slot, id) => rpc('shop_equip_cosmetic', { p_slot: slot, p_id: id || null }, () => call('inventory', { action: 'cosmetic', slot, id })),
+  equipLoadout: (weapon, mods) => rpc('shop_equip_loadout', { p_weapon: weapon, p_mods: mods }, () => call('inventory', { action: 'loadout', weapon, mods })),
+  buyModCrate: () => rpc('shop_open_crate', {}, () => call('inventory', { action: 'crate' })),
   sendFeedback: ({ kind, message }) => call('send-feedback', { kind, message, page: window.location.pathname }),
 
   async saveSettings(settings) {
